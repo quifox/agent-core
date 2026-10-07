@@ -1,0 +1,56 @@
+{
+  "name": "@quifox/agent-plugin-model",
+  "version": "0.1.0",
+  "description": "Model plugins with internal Chat and Responses protocol adapters",
+  "keywords": ["agent", "plugin", "model", "chat"],
+  "private": true,
+  "type": "module",
+  "types": "./dist/index.d.ts",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "typesVersions": {
+    "*": {
+      "weapp": [
+        "dist/weapp.d.ts"
+      ],
+      "*": [
+        "dist/index.d.ts"
+      ]
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./weapp": {
+      "types": "./dist/weapp.d.ts",
+      "import": "./dist/weapp.js"
+    }
+  },
+  "scripts": {
+    "build": "pnpm --filter @quifox/agent-core build && tsc -p tsconfig.json",
+    "typecheck": "pnpm --filter @quifox/agent-core build && tsc -p tsconfig.test.json --noEmit --pretty false",
+    "test": "vitest run",
+    "check": "pnpm typecheck && pnpm test && pnpm build"
+  },
+  "dependencies": {
+    "@quifox/agent-core": "workspace:*",
+    "json5": "2.2.3",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3",
+    "vitest": "4.1.11"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/quifox/agent-core.git",
+    "directory": "packages/agent-plugin-model"
+  },
+  "license": "MIT"
+}

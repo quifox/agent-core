@@ -1,0 +1,10 @@
+packages:
+  - packages/*
+  - examples/*
+
+onlyBuiltDependencies:
+  - esbuild
+
+# Keep test tooling within the existing Node.js 22 runtime range.
+overrides:
+  vite: 6.4.4

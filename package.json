@@ -1,0 +1,23 @@
+{
+  "name": "@quifox/agent-workspace",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.31.0",
+  "engines": { "node": ">=22" },
+  "license": "MIT",
+  "scripts": {
+    "build": "pnpm -r --sort --workspace-concurrency=1 exec tsc -p tsconfig.json",
+    "typecheck": "pnpm -r --sort --workspace-concurrency=3 exec tsc -p tsconfig.test.json --noEmit --pretty false",
+    "test": "pnpm -r --workspace-concurrency=3 exec vitest run",
+    "test:coverage": "vitest run --config vitest.coverage.config.mjs",
+    "check": "pnpm build && pnpm typecheck && pnpm test"
+  },
+  "devDependencies": {
+    "@quifox/agent-core": "workspace:*",
+    "@quifox/agent-plugin-model": "workspace:*",
+    "@quifox/agent-plugin-session": "workspace:*",
+    "@vitest/coverage-v8": "4.1.11",
+    "typescript": "5.9.3",
+    "vitest": "4.1.11"
+  }
+}

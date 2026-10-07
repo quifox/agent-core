@@ -1,0 +1,10 @@
+{
+  "name": "@quifox/teams-web", "version": "0.1.0", "private": true, "type": "module",
+  "scripts": {"build": "tsc -p tsconfig.json", "typecheck": "tsc -p tsconfig.test.json --noEmit --pretty false", "test": "vitest run", "start": "node dist/server.js"},
+  "dependencies": {
+    "@quifox/agent-core": "workspace:*", "@quifox/agent-plugin-model": "workspace:*", "@quifox/agent-plugin-session": "workspace:*",
+    "@quifox/agent-plugin-system-prompt": "workspace:*", "@quifox/agent-plugin-steering": "workspace:*",
+    "@quifox/agent-plugin-events": "workspace:*", "@quifox/agent-plugin-teams": "workspace:*", "zod": "4.4.3"
+  },
+  "devDependencies": {"@types/node": "22.19.19", "typescript": "5.9.3", "vitest": "4.1.11"}
+}

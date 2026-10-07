@@ -1,0 +1,5 @@
+export { ChatSessionContext, COMPACTION_PROMPT } from './context.js'
+export type { SessionFork } from './context.js'
+export { CompactionPlugin } from './compaction.js'
+export type { CompactionPluginOptions } from './compaction.js'
+export { ChatCompactionSource, estimateChatInputTokens } from './chat-source.js'

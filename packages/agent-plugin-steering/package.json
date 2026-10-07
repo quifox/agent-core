@@ -1,0 +1,42 @@
+{
+  "name": "@quifox/agent-plugin-steering",
+  "version": "0.1.0",
+  "description": "Concurrent input batching and run steering for Agent Core",
+  "keywords": ["agent", "steering", "concurrency", "interrupt"],
+  "private": true,
+  "type": "module",
+  "types": "./dist/index.d.ts",
+  "main": "./dist/index.js",
+  "files": ["dist"],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "pnpm --filter @quifox/agent-core build && pnpm --filter @quifox/agent-plugin-session build && pnpm --filter @quifox/agent-plugin-interrupt build && tsc -p tsconfig.json",
+    "typecheck": "pnpm --filter @quifox/agent-core build && pnpm --filter @quifox/agent-plugin-session build && pnpm --filter @quifox/agent-plugin-interrupt build && pnpm --filter @quifox/agent-plugin-checkpoint build && pnpm --filter @quifox/agent-plugin-events build && tsc -p tsconfig.test.json --noEmit --pretty false",
+    "test": "vitest run",
+    "check": "pnpm typecheck && pnpm test && pnpm build"
+  },
+  "dependencies": {
+    "@quifox/agent-core": "workspace:*",
+    "@quifox/agent-plugin-interrupt": "workspace:*",
+    "@quifox/agent-plugin-session": "workspace:*"
+  },
+  "devDependencies": {
+    "@quifox/agent-plugin-model": "workspace:*",
+    "@quifox/agent-plugin-checkpoint": "workspace:*",
+    "@quifox/agent-plugin-events": "workspace:*",
+    "typescript": "5.9.3",
+    "vitest": "4.1.11",
+    "zod": "4.4.3"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/quifox/agent-core.git",
+    "directory": "packages/agent-plugin-steering"
+  },
+  "license": "MIT"
+}

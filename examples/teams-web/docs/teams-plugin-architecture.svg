@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="880" viewBox="0 0 1600 880"><defs><marker id="end" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L8,3 L0,6" fill="none" stroke="context-stroke" stroke-width="1.5"/></marker><marker id="start" markerWidth="10" markerHeight="10" refX="0" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M8,0 L0,3 L8,6" fill="none" stroke="context-stroke" stroke-width="1.5"/></marker></defs><g font-family="-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif"><rect x="0" y="0" width="1600" height="880" rx="16" fill="#f6f6fa" stroke="#f6f6fa" stroke-width="1.5"/>
+<text x="50" y="64" font-size="34" fill="#24283c" text-anchor="start"><tspan x="50" dy="0">用插件组合团队协作</tspan></text>
+<text x="50" y="101" font-size="19" fill="#6c7287" text-anchor="start"><tspan x="50" dy="0">四个普通 Agent：独立会话与专家提示词，共享 Teams；事件由服务端推送给 Web。</tspan></text>
+<rect x="40" y="140" width="1070" height="665" rx="16" fill="#ffffff" stroke="#dcdfea" stroke-width="1.5"/>
+<rect x="1220" y="140" width="340" height="665" rx="16" fill="#ffffff" stroke="#dcdfea" stroke-width="1.5"/>
+<text x="70" y="182" font-size="22" fill="#24283c" text-anchor="start"><tspan x="70" dy="0">本地服务端 · Node Host</tspan></text>
+<text x="1250" y="182" font-size="22" fill="#24283c" text-anchor="start"><tspan x="1250" dy="0">Web 客户端</tspan></text>
+<polyline points="250,315 250,390" fill="none" stroke="#6352cc" stroke-width="2" marker-end="url(#end)"/>
+<polyline points="565,315 565,390" fill="none" stroke="#6352cc" stroke-width="2" marker-end="url(#end)"/>
+<polyline points="890,315 890,390" fill="none" stroke="#6352cc" stroke-width="2" marker-end="url(#end)"/>
+<polyline points="90,260 65,260 65,680 90,680" fill="none" stroke="#287d62" stroke-width="2" marker-end="url(#end)"/>
+<polyline points="1065,250 1250,250" fill="none" stroke="#6352cc" stroke-width="2" marker-start="url(#start)"/>
+<text x="1167" y="228" font-size="15" fill="#6352cc" text-anchor="middle"><tspan x="1167" dy="0">POST</tspan></text>
+<polyline points="1060,465 1250,465" fill="none" stroke="#6352cc" stroke-width="2" marker-end="url(#end)"/>
+<text x="1167" y="446" font-size="16" fill="#6352cc" text-anchor="middle"><tspan x="1167" dy="0">SSE ×4</tspan></text>
+<polyline points="690,680 1250,680" fill="none" stroke="#287d62" stroke-width="2" marker-end="url(#end)"/>
+<text x="977.5" y="663" font-size="18" fill="#287d62" text-anchor="middle"><tspan x="977.5" dy="0">邮箱事件 · SSE</tspan></text>
+<rect x="90" y="205" width="975" height="110" rx="16" fill="#f0edf9" stroke="#cfc5ef" stroke-width="1.5"/>
+<text x="577.5" y="251" font-size="27" fill="#6352cc" text-anchor="middle"><tspan x="577.5" dy="0">Agent Core ×4</tspan></text>
+<text x="577.5" y="289" font-size="18" fill="#24283c" text-anchor="middle"><tspan x="577.5" dy="0">研究员   ·   方案师   ·   核验员   ·   撰稿人</tspan></text>
+<rect x="90" y="390" width="320" height="155" rx="16" fill="#f0f5fc" stroke="#d6e4f3" stroke-width="1.5"/>
+<text x="250" y="430" font-size="19" fill="#24283c" text-anchor="middle"><tspan x="250" dy="0">ChatConversationPlugin</tspan></text>
+<text x="250" y="464" font-size="15" fill="#6c7287" text-anchor="middle"><tspan x="250" dy="0">ChatSessionPlugin + ChatModelPlugin</tspan></text>
+<text x="250" y="500" font-size="16" fill="#24283c" text-anchor="middle"><tspan x="250" dy="0">会话记忆与模型生成</tspan><tspan x="250" dy="24">Provider / Chat 协议</tspan></text>
+<rect x="435" y="390" width="265" height="155" rx="16" fill="#f3eefb" stroke="#ddd2ed" stroke-width="1.5"/>
+<text x="567.5" y="436" font-size="19" fill="#24283c" text-anchor="middle"><tspan x="567.5" dy="0">SystemPromptPlugin</tspan></text>
+<text x="567.5" y="484" font-size="17" fill="#24283c" text-anchor="middle"><tspan x="567.5" dy="0">成员职责与专家提示词</tspan><tspan x="567.5" dy="25.5">各 Agent 独立组合</tspan></text>
+<rect x="725" y="390" width="335" height="155" rx="16" fill="#f0edf9" stroke="#ddd5ed" stroke-width="1.5"/>
+<text x="892.5" y="436" font-size="19" fill="#24283c" text-anchor="middle"><tspan x="892.5" dy="0">EventPublisherPlugin</tspan></text>
+<text x="892.5" y="483" font-size="16" fill="#24283c" text-anchor="middle"><tspan x="892.5" dy="0">每个成员的独立事件出口</tspan><tspan x="892.5" dy="24">生成增量、工具与执行状态</tspan></text>
+<text x="95" y="578" font-size="16" fill="#6c7287" text-anchor="start"><tspan x="95" dy="0">每个 Agent 各自持有上面的插件实例，通过现有钩子参与执行。</tspan></text>
+<rect x="90" y="620" width="600" height="125" rx="16" fill="#edf7f1" stroke="#cfe5d7" stroke-width="1.5"/>
+<text x="390" y="662" font-size="24" fill="#287d62" text-anchor="middle"><tspan x="390" dy="0">TeamsPlugin · 共享一个实例</tspan></text>
+<text x="390" y="697" font-size="18" fill="#24283c" text-anchor="middle"><tspan x="390" dy="0">成员登记 · 中心邮箱 · 消息唤醒</tspan></text>
+<text x="390" y="727" font-size="16" fill="#287d62" text-anchor="middle"><tspan x="390" dy="0">team_send / team_receive</tspan></text>
+<text x="90" y="786" font-size="15" fill="#6c7287" text-anchor="start"><tspan x="90" dy="0">团队协作与事件传输分别由插件和应用 Host 提供。</tspan></text>
+<rect x="1250" y="205" width="280" height="90" rx="16" fill="#f7f6fb" stroke="#dcdfea" stroke-width="1.5"/>
+<text x="1390" y="241" font-size="21" fill="#24283c" text-anchor="middle"><tspan x="1390" dy="0">目标任务</tspan></text>
+<text x="1390" y="269" font-size="15" fill="#6c7287" text-anchor="middle"><tspan x="1390" dy="0">任意成员均可 run / stream</tspan></text>
+<rect x="1250" y="390" width="280" height="155" rx="16" fill="#f4f1fc" stroke="#ddd5ed" stroke-width="1.5"/>
+<text x="1390" y="439" font-size="23" fill="#6352cc" text-anchor="middle"><tspan x="1390" dy="0">四个成员对话</tspan></text>
+<text x="1390" y="484" font-size="17" fill="#24283c" text-anchor="middle"><tspan x="1390" dy="0">各自独立接收事件</tspan><tspan x="1390" dy="25.5">实时呈现执行过程</tspan></text>
+<rect x="1250" y="620" width="280" height="125" rx="16" fill="#edf7f1" stroke="#cfe5d7" stroke-width="1.5"/>
+<text x="1390" y="661" font-size="23" fill="#287d62" text-anchor="middle"><tspan x="1390" dy="0">四个收件箱</tspan></text>
+<text x="1390" y="697" font-size="17" fill="#24283c" text-anchor="middle"><tspan x="1390" dy="0">按收件人归类</tspan><tspan x="1390" dy="25.5">展示每封信与领取状态</tspan></text>
+<text x="805" y="852" font-size="20" fill="#6352cc" text-anchor="middle"><tspan x="805" dy="0">调用者给目标，插件提供职责、通信与观察能力。</tspan></text></g></svg>

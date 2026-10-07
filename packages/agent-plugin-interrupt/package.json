@@ -1,0 +1,39 @@
+{
+  "name": "@quifox/agent-plugin-interrupt",
+  "version": "0.1.0",
+  "description": "Cooperative pause and terminate policies for Agent Core",
+  "keywords": ["agent", "interrupt", "pause", "recovery"],
+  "private": true,
+  "type": "module",
+  "types": "./dist/index.d.ts",
+  "main": "./dist/index.js",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "pnpm --filter @quifox/agent-core build && tsc -p tsconfig.json",
+    "typecheck": "pnpm --filter @quifox/agent-core build && tsc -p tsconfig.test.json --noEmit --pretty false",
+    "test": "vitest run",
+    "check": "pnpm typecheck && pnpm test && pnpm build"
+  },
+  "dependencies": {
+    "@quifox/agent-core": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3",
+    "vitest": "4.1.11",
+    "zod": "4.4.3"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/quifox/agent-core.git",
+    "directory": "packages/agent-plugin-interrupt"
+  },
+  "license": "MIT"
+}

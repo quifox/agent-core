@@ -1,0 +1,44 @@
+{
+  "name": "@quifox/agent-plugin-checkpoint",
+  "version": "0.1.0",
+  "description": "Current-turn tool execution checkpoints for Agent Core",
+  "keywords": ["agent", "checkpoint", "recovery", "tools"],
+  "private": true,
+  "type": "module",
+  "types": "./dist/index.d.ts",
+  "main": "./dist/index.js",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "pnpm --filter @quifox/agent-plugin-session build && tsc -p tsconfig.json",
+    "typecheck": "pnpm --filter @quifox/agent-plugin-session build && tsc -p tsconfig.test.json --noEmit --pretty false",
+    "test": "vitest run",
+    "check": "pnpm typecheck && pnpm test && pnpm build"
+  },
+  "dependencies": {
+    "@quifox/agent-core": "workspace:*",
+    "@quifox/agent-plugin-session": "workspace:*"
+  },
+  "devDependencies": {
+    "@quifox/agent-plugin-model": "workspace:*",
+    "@quifox/agent-plugin-compaction": "workspace:*",
+    "@quifox/agent-plugin-events": "workspace:*",
+    "@quifox/agent-plugin-interrupt": "workspace:*",
+    "zod": "4.4.3",
+    "typescript": "5.9.3",
+    "vitest": "4.1.11"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/quifox/agent-core.git",
+    "directory": "packages/agent-plugin-checkpoint"
+  },
+  "license": "MIT"
+}

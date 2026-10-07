@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Teams 插件 · 实时工作台</title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <main>
+        <header class="masthead">
+            <div><p class="eyebrow">AGENT CORE + TEAMS PLUGIN</p><h1>一个共享插件，四个平级 Agent。</h1><p class="subtitle">每个成员保留自己的名称、Session、Model 与插件组合。</p></div>
+            <div class="connection"><span class="connection-dot"></span><span id="connection">正在连接事件源</span><span id="model" class="model-name"></span></div>
+        </header>
+        <section class="brief" aria-labelledby="brief-title">
+            <div class="brief-heading"><span class="section-number">01</span><div><h2 id="brief-title">直接调用任意成员</h2><p>成员运行中也可以继续发送；连续输入会合入同一个下一轮。</p></div></div>
+            <form id="task-form">
+                <label class="sr-only" for="prompt">发送给成员的消息</label><textarea id="prompt" rows="2" maxlength="6000" required></textarea>
+                <div class="form-actions"><label for="entry">发送给</label><select id="entry"><option value="A">Agent A</option><option value="B">Agent B</option><option value="C">Agent C</option><option value="D">Agent D</option></select><span id="task-status" role="status">可以随时追加消息</span><button id="start" type="submit" disabled>调用 run() <span aria-hidden="true">↗</span></button></div>
+            </form>
+            <p id="error" class="error" role="alert" hidden></p>
+        </section>
+        <section aria-label="四个成员的独立执行过程"><div class="section-title"><h2><span class="section-number">02</span>成员实时执行</h2><p>四路独立 SSE · 状态只有 running / idle</p></div><div id="agents" class="agent-grid"></div></section>
+        <section class="mailbox" aria-labelledby="mailbox-title">
+            <div class="section-title"><h2 id="mailbox-title"><span class="section-number">03</span>团队消息</h2><p><span id="mail-count">0</span> 条消息 · 按成员显示发送时间与领取状态</p></div>
+            <div id="mailboxes" class="mail-grid"></div>
+        </section>
+        <footer><span>Agent Core + TeamsPlugin + RunSteeringPlugin</span><span>本地服务端运行 · 四路 SSE · 团队长期保留</span></footer>
+    </main>
+    <script type="module" src="/ui.js"></script>
+</body>
+</html>
