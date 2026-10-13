@@ -12,6 +12,7 @@ function readable(value: unknown, depth = 0): string {
     if (typeof value === 'object') return Object.entries(value).filter(([key]) => !excluded.test(key)).map(([key, item]) => `${key}: ${readable(item, depth + 1)}`).join('\n')
     return String(value)
 }
+export function toolResultText(content: string): string { return readable(content) }
 export function traceText(events: RuntimeEvent[]): string {
     return events.slice(-20).map(event => {
         const data = event.data as { type?: string; call?: { name: string; input: unknown }; run?: { call: { name: string }; result: unknown } }

@@ -3,6 +3,20 @@ import { render } from 'ink-testing-library'
 import { defaultConfig, publicConfig, type ResourceView, type RuntimeCommand, type RuntimeEvent, type RuntimeSnapshot, type SessionView } from '@quifox/shared-runtime'
 import { TerminalApp, type TerminalRuntime } from '../src/app.js'
 
+it('renders structured tool receipts as readable facts without protocol identities or escaped newlines', async () => {
+    const view: SessionView = { id: 'synthetic', title: 'Tool result', workspace: '/synthetic', status: 'idle', updatedAt: '2026-01-01', resumeAvailable: false,
+        messages: [{ id: 'tool', origin: 'context', message: { role: 'tool', toolName: 'subagent_wait', toolCallId: 'internal-call', content: JSON.stringify({ status: 'completed', taskId: 'internal-task', name: 'Curie', text: 'First line\nSecond line' }) } }],
+        events: [], pendingMessages: [], skills: { skills: [], issues: [] }, guidance: [], backgroundTasks: [], toolStates: [], approvals: [], memory: { enabled: false, processing: false, content: '', summaries: 0 } }
+    const snapshot: RuntimeSnapshot = { configurationRevision: 'fixture', config: publicConfig(defaultConfig('/synthetic')), sessions: [view] }
+    const runtime: TerminalRuntime = { close: async () => {}, subscribe: () => () => {}, command: async command => command.type === 'snapshot' ? structuredClone(command.sessionId ? view : snapshot) : {} }
+    const app = render(<TerminalApp runtime={runtime} initialSessionId={view.id}/>)
+    try {
+        await expect.poll(() => app.lastFrame()).toContain('Second line')
+        expect(app.lastFrame()).toContain('Curie'); expect(app.lastFrame()).toContain('已完成')
+        expect(app.lastFrame()).not.toContain('internal-task'); expect(app.lastFrame()).not.toContain('taskId'); expect(app.lastFrame()).not.toContain('\\n')
+    } finally { app.unmount() }
+})
+
 it('selects the effective effort directly without adding an inheritance menu item', async () => {
     const config = defaultConfig('/synthetic'); config.model.reasoningEfforts = ['low', 'high', 'max']
     const snapshot: RuntimeSnapshot = { configurationRevision: 'fixture', config: publicConfig(config), sessions: [] }, commands: RuntimeCommand[] = []

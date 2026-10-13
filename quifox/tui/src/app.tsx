@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Box, Text, measureElement, useApp, useInput, useStdout, type DOMElement } from 'ink'
 import { toolSummary, agentRecipients, inputSuggestions, type ObservabilityView, type InputRoutingReceipt, type ResourceView, type RuntimeCommand, type RuntimeEvent, type RuntimeSnapshot, type SessionView } from '@quifox/shared-runtime'
 import { stripVTControlCharacters } from 'node:util'
-import { traceText } from './trace-text.js'
+import { toolResultText, traceText } from './trace-text.js'
 
 export interface TerminalRuntime { command(command: RuntimeCommand): Promise<unknown>; subscribe(listener: (event: RuntimeEvent) => void): () => void; close(): Promise<void> }
 
@@ -324,7 +324,7 @@ export function TerminalApp({ runtime, initialSessionId, showResume = false }: {
         {picker ? <Box flexDirection="column"><Text bold>{safe(picker.title)}</Text>{picker.choices.slice(Math.max(0, choice - 3), Math.max(0, choice - 3) + Math.max(3, height - 14)).map((item, index) => <Text key={index + Math.max(0, choice - 3)} inverse={index + Math.max(0, choice - 3) === choice} wrap="truncate">{index + Math.max(0, choice - 3) === choice ? '› ' : '  '}{safe(item.label)}</Text>)}<Text dimColor>↑↓ 选择 · Enter 确认 · Esc 返回</Text></Box> : panel ? <Box borderStyle="round" flexDirection="column" paddingX={1}><Text>{safe((observabilityPanel ? observabilityText(observation) : memoryPanel ? `${view?.memory.processing ? 'Memory 正在整理…\n' : ''}${view?.memory.error ? `${view.memory.error}\n` : ''}${view?.memory.content || (view?.memory.enabled ? 'Memory 当前为空。' : 'Memory 已关闭。')}` : panel).slice(0, 6000))}</Text></Box> :
             <Box flexDirection="column" marginTop={1}>{view?.messages.slice(-6).map(entry => <Box key={entry.id} flexDirection="column" marginBottom={1}>
                 <Text color={entry.message.role === 'user' ? '#f4cf64' : entry.message.role === 'tool' ? '#9babc0' : '#58a6eb'} bold>{safe(entry.message.role === 'tool' ? entry.message.toolName : entry.message.role)}</Text>
-                <Text>{safe(entry.message.content.slice(-2200) || (entry.message.role === 'assistant' && entry.message.toolCalls?.length ? entry.message.toolCalls.map(toolSummary).join('\n') : ''))}</Text>
+                <Text>{safe((entry.message.role === 'tool' ? toolResultText(entry.message.content) : entry.message.content).slice(-2200) || (entry.message.role === 'assistant' && entry.message.toolCalls?.length ? entry.message.toolCalls.map(toolSummary).join('\n') : ''))}</Text>
             </Box>)}{live && <Box flexDirection="column"><Text>QuiFox</Text><Text>{safe(live.slice(-2200))}</Text></Box>}</Box>}
         </Box></Box>
         {approval && <Box borderStyle="round" flexDirection="column" paddingX={1} flexShrink={0}><Text bold wrap="truncate">需要批准：{safe(approval.call.name)}</Text><Text wrap="truncate-middle">{safe(approval.inspection?.summary ?? toolSummary(approval.call))}</Text><Text dimColor wrap="truncate">/approve · /deny · /trace 查看差异与参数</Text></Box>}
