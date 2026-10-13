@@ -33,11 +33,7 @@ export class DesktopEngine {
         const generation = ++this.generation
         this.readiness = new Promise<void>((accept, reject) => {
             const fail = (error: Error): void => {
-                this.cancelPresentations()
-                this.failure = error; reject(error)
-                for (const pending of this.pending.values()) pending.reject(error)
-                this.pending.clear()
-                for (const listener of this.faults) try { listener(error.message) } catch { /* Observers do not own transport state. */ }
+                this.fail(error); reject(error)
             }
             const timeout = setTimeout(() => fail(new Error('引擎连接超时。')), 20_000)
             void this.port.start(frame => {
@@ -56,11 +52,20 @@ export class DesktopEngine {
     async command(command: RuntimeCommand): Promise<unknown> {
         await this.connect()
         if (this.failure) throw this.failure
-        const id = crypto.randomUUID()
+        const id = crypto.randomUUID(), generation = this.generation
         return new Promise<unknown>((accept, reject) => {
             this.pending.set(id, { accept, reject })
-            void this.port.write({ id, command }).catch(error => { this.pending.delete(id); reject(error) })
+            void this.port.write({ id, command }).catch(cause => {
+                if (generation === this.generation) this.fail(cause instanceof Error ? cause : new Error('引擎连接写入失败。'))
+            })
         })
+    }
+
+    private fail(error: Error): void {
+        this.failure = error; this.cancelPresentations()
+        for (const pending of this.pending.values()) pending.reject(error)
+        this.pending.clear()
+        for (const listener of this.faults) try { listener(error.message) } catch { /* Observers do not own transport state. */ }
     }
 
     subscribe(listener: (event: RuntimeEvent) => void): () => void { this.listeners.add(listener); return () => this.listeners.delete(listener) }
