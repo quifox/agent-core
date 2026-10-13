@@ -2,6 +2,24 @@ import { expect, it } from 'vitest'
 import type { CommandEnvelope, EngineFrame, RuntimeEvent } from '@quifox/shared-runtime'
 import { DesktopEngine, type EnginePort } from '../src/engine.js'
 
+it('rejects all pending commands on a transport write failure and recovers only through reconnect', async () => {
+    let receive!: (frame: EngineFrame) => void, broken = true
+    const envelopes: CommandEnvelope[] = [], faults: string[] = []
+    const engine = new DesktopEngine({ start: async callback => { receive = callback; callback({ kind: 'ready', protocol: 1 }) }, write: async envelope => {
+        envelopes.push(envelope)
+        if (broken && envelopes.length === 2) throw new Error('Synthetic stdin unavailable')
+        if (!broken) receive({ kind: 'response', id: envelope.id, ok: true, value: 'reconnected' })
+    } })
+    engine.onError(error => faults.push(error))
+    const first = engine.command({ type: 'snapshot' }), second = engine.command({ type: 'snapshot', sessionId: 'session' })
+    const results = await Promise.allSettled([first, second])
+    expect(results.every(result => result.status === 'rejected')).toBe(true)
+    expect(engine.disconnected).toBe(true); expect(faults).toEqual(['Synthetic stdin unavailable'])
+    await expect(engine.command({ type: 'snapshot' })).rejects.toThrow('stdin unavailable'); expect(envelopes).toHaveLength(2)
+    broken = false; await engine.reconnect()
+    expect(await engine.command({ type: 'snapshot' })).toBe('reconnected'); expect(engine.disconnected).toBe(false)
+})
+
 it('sends a failure receipt to a surviving host when reconnect cancels an unconfirmed presentation', async () => {
     let receive!: (frame: EngineFrame) => void, finish!: () => void
     const envelopes: CommandEnvelope[] = []

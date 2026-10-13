@@ -17,6 +17,8 @@ it('blocks Memory admission throughout a configuration transaction and commits o
     try {
         await entered
         await expect(fixture.runtime.command({ type: 'memory', sessionId: session.id })).rejects.toThrow('配置正在更新')
+        const diagnostics = await readFile(join(fixture.root, 'logs', `runtime-${process.pid}.log`), 'utf8')
+        expect(diagnostics.split('\n').filter(Boolean).map(line => JSON.parse(line))).toContainEqual(expect.objectContaining({ action: 'memory', error: expect.objectContaining({ message: '配置正在更新，请稍后重试。' }) }))
         expect((await fixture.runtime.command({ type: 'snapshot' }) as RuntimeSnapshot).config.memory.generate).toBe(true)
         release(); await updating
         const snapshot = await fixture.runtime.command({ type: 'snapshot' }) as RuntimeSnapshot

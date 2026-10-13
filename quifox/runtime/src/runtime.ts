@@ -260,17 +260,18 @@ export class QuiFoxRuntime {
     subscribe(listener: (event: RuntimeEvent) => void): () => void { this.listeners.add(listener); return () => this.listeners.delete(listener) }
 
     command(command: RuntimeCommand): Promise<unknown> {
-        if (command.type === 'close') return this.close().then(() => ({ closed: true }))
-        if (this.closed) return Promise.reject(new Error('quifox 已关闭。'))
-        const configures = ['config', 'session-config', 'refresh-models', 'mcp-set-enabled', 'plugin-set-enabled', 'plugin-install'].includes(command.type) || (command.type === 'mcp' && command.action === 'connect')
-        if ((this.configuring || this.configurationPending) && (configures || ['create', 'submit', 'resume', 'memory'].includes(command.type))) return Promise.reject(new Error('配置正在更新，请稍后重试。'))
-        // Reserve admission before any await; a refresh may release its own busy flag only.
-        if (configures) this.configurationPending = true
-        const operation = this.executeCommand(command, [...this.commands]).catch(async cause => {
+        const reject = async (cause: unknown): Promise<never> => {
             const error = cause instanceof z.ZodError ? { message: '配置或参数校验失败。', issues: cause.issues.map(issue => ({ path: issue.path, code: issue.code })) } : this.redact(cause instanceof Error ? { message: cause.message, stack: cause.stack } : { message: '操作失败。' })
             await this.diagnostics.write(command.type, error).catch(() => {})
             throw cause
-        }).finally(() => {
+        }
+        if (command.type === 'close') return this.close().then(() => ({ closed: true })).catch(reject)
+        if (this.closed) return reject(new Error('quifox 已关闭。'))
+        const configures = ['config', 'session-config', 'refresh-models', 'mcp-set-enabled', 'plugin-set-enabled', 'plugin-install'].includes(command.type) || (command.type === 'mcp' && command.action === 'connect')
+        if ((this.configuring || this.configurationPending) && (configures || ['create', 'submit', 'resume', 'memory'].includes(command.type))) return reject(new Error('配置正在更新，请稍后重试。'))
+        // Reserve admission before any await; a refresh may release its own busy flag only.
+        if (configures) this.configurationPending = true
+        const operation = this.executeCommand(command, [...this.commands]).catch(reject).finally(() => {
             this.commands.delete(operation); if (configures) this.configurationPending = false
         })
         this.commands.add(operation)
