@@ -7,6 +7,7 @@
 - snapshot/fork 显式复制数据，不复制 Promise、业务资源或正在运行的函数栈。恢复需 Session 的对应快照和同样的工具组合。
 - `{resume:true}` 将未完成的调用作为一次临时模型产物交回 Core 原有工具循环，已完成调用不重复。本插件不在 onRunStart 拒绝 started 调用；通过 execution.requiresRetry(callId) 查询该调用进入本次恢复前是否结果未知，重试或停止由独立策略插件决定。该查询不受本轮 beforeTool 暂记的影响。默认安全恢复组合显式注册 InterruptPlugin；自定义组合自行提供策略，本插件不隐式安装它。onRunStart 在新输入覆盖未完成记录之前拒绝。
 - 恢复轮的 Session 不重复接纳 assistant；全部结果闭合后，下一模型轮使用原有效上下文并按正常压缩屏障发送。
+- 没有工具记录时，resume 不伪造工具轮，只允许配对 Session 从其已接纳上下文继续模型请求。尚未接纳的原输入仍由 Host 以原 prompt 冻结重试；不能把本插件没有记录解读为未知副作用安全。
 - 本插件默认内存保存；跨进程恢复必须同时保存/恢复本轮快照和 Session 快照，不能只凭缺少工具消息就认定操作未执行。
 
 ## 状态含义与恢复选择
@@ -21,7 +22,9 @@ prepare 抛错、execute 抛错或前置后项抛错都可能留下保守的 sta
 
 正常前置 stop 的 Outcome 为成功时，onRunEnd 回滚本次暂记；失败 Outcome 不据缺少回执回滚为 not-started。其后某个独立收尾 handler 若改变 Outcome，不追溯重跑已完成的 Checkpoint 收尾。
 
-confirm 只更新本轮执行记录。Session 或 Conversation 的 confirmTool 是另外的消息保存命令；宿主先让会话成功持久化真实回执，再更新 Checkpoint，不能只改一个 owner 后宣称恢复完成。
+confirm 只更新本轮执行记录。Session 或 Conversation 的 confirmTool 是另外的消息保存命令；宿主必须把两者作为一次配对提交。可以暂记 Checkpoint 后让 Session 的 store 保存同一状态记录；保存失败时用 restore 还原先前 Checkpoint，不能只推进一个 owner 后宣称恢复完成。restore 只允许在没有物理运行时使用。
+
+没有工具记录时，只有显式 canResumeModel 回调核实配对会话存在已接纳的待完成请求，才允许继续模型请求；默认回调不接受无依据续跑。
 
 ## 能力发布与组合
 

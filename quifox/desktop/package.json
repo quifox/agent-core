@@ -1,0 +1,48 @@
+{
+  "name": "@quifox/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "bun run --filter @quifox/shared-runtime build && bun run --bun tsc -p tsconfig.json --noEmit && vite build",
+    "typecheck": "bun run --bun tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:ui": "playwright test",
+    "check": "bun run build && bun run typecheck && bun run test",
+    "engine:build": "bun run --filter @quifox/shared-runtime build && bun run scripts/build-engine.ts",
+    "desktop:dev": "bun run engine:build && tauri dev",
+    "desktop:build": "bun run engine:build && bun run scripts/build-notices.ts && tauri build"
+  },
+  "dependencies": {
+    "@assistant-ui/react": "0.15.28",
+    "@quifox/agent-core": "workspace:*",
+    "@quifox/shared-runtime": "workspace:*",
+    "@radix-ui/react-collapsible": "^1.2.1",
+    "@radix-ui/react-dialog": "1.3.1",
+    "@radix-ui/react-switch": "^1.4.1",
+    "@radix-ui/react-tooltip": "^1.4.1",
+    "@tauri-apps/api": "2.12.3",
+    "diff": "9.0.0",
+    "monaco-editor": "0.57.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "react-markdown": "10.1.0",
+    "remark-gfm": "4.0.1"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.64.0",
+    "@tauri-apps/cli": "2.12.2",
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "@types/node": "22.19.19",
+    "typescript": "5.9.3",
+    "vite": "6.4.4",
+    "vitest": "4.1.11",
+    "@testing-library/react": "16.3.3",
+    "@testing-library/dom": "10.4.2",
+    "@testing-library/user-event": "14.6.7",
+    "jsdom": "30.1.2"
+  }
+}

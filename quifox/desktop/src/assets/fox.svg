@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" role="img" aria-labelledby="title desc">
+    <title id="title">QuiFox companion</title>
+    <desc id="desc">A calm seated blue fox mascot with a clean white face, warm yellow ears, a curled tail and a small terminal tag.</desc>
+    <path fill="#0C739F" d="M140 213C164 217 174 202 177 183 180 162 195 146 210 151 228 157 231 178 224 197 216 221 194 234 168 232 155 231 143 225 140 213Z"/>
+    <path fill="#FFFFFF" d="M191 161C196 155 204 153 212 158 220 165 224 177 221 187L211 183Q208 183 205 188L199 181Q197 179 193 182C189 175 188 168 191 161Z"/>
+    <path fill="#18A4DA" d="M88 135C102 126 126 126 139 137 149 146 150 163 154 181 158 196 171 204 169 220 166 230 151 233 137 231L95 233C76 233 67 226 70 214L76 181C79 164 76 145 88 135Z"/>
+    <path fill="#0E8DC4" d="M139 160C142 179 146 192 154 202 164 212 167 222 157 228 150 232 141 232 135 229 146 223 145 212 138 202 130 189 129 173 139 160Z"/>
+    <path fill="#FFFFFF" d="M101 152C113 157 124 158 135 152L131 170C128 179 121 185 115 188 108 184 105 177 103 168Z"/>
+    <path stroke="#3A6D8A" stroke-opacity=".55" stroke-width="1.7" stroke-linecap="round" d="M94 185C94 197 91 207 91 216M120 187C122 199 121 207 121 216"/>
+    <path fill="#2CA7DB" d="M77 218C83 214 96 215 101 220 105 224 102 230 97 231L83 232C76 231 72 225 77 218Z"/>
+    <path fill="#2CA7DB" d="M112 219C118 215 132 216 138 221 142 225 139 230 133 231L120 232C113 232 108 225 112 219Z"/>
+    <path stroke="#29546E" stroke-width="3.5" stroke-linecap="round" d="M100 150Q118 158 136 150"/>
+    <g transform="translate(16 20) scale(.85)">
+        <path fill="#18A4DA" d="M65 88 62 39C61 30 66 29 72 35L99 62C113 57 129 57 144 63L167 36C173 29 179 29 177 40L169 90C177 109 163 130 145 143 128 155 112 155 95 143 76 131 62 111 65 88Z"/>
+        <path fill="#F0CF58" d="M73 48 89 65Q90 66 88 68L77 77Q74 68 73 48ZM166 48 151 66Q150 68 153 70L163 78Q165 66 166 48Z"/>
+        <path fill="#FFFFFF" d="M70 101C84 98 98 105 111 116C115 120 118 123 119 124C120 123 123 120 127 116C141 104 156 98 171 101C165 122 154 136 139 145C127 151 113 151 101 144C86 135 76 121 70 101Z"/>
+        <path stroke="#29546E" stroke-width="3.4" stroke-linecap="round" d="M86 102Q93 98 100 102M140 102Q147 98 154 102"/>
+        <path fill="#29546E" d="M114 123Q120 121 126 123L122 129Q120 131 118 129Z"/>
+        <path stroke="#94AAB5" stroke-width="1.7" stroke-linecap="round" d="M120 131V134"/>
+    </g>
+    <path stroke="#C59D28" stroke-width="2.5" stroke-linecap="round" d="M119 151V158"/>
+    <rect x="110" y="157" width="18" height="14" rx="3" fill="#E5C861"/>
+    <path stroke="#29546E" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" d="m114 161 3 3-3 3m7 0h3"/>
+</svg>

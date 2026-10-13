@@ -15,15 +15,16 @@
     }
   },
   "scripts": {
-    "build": "pnpm --filter @quifox/agent-core build && pnpm --filter @quifox/agent-plugin-session build && pnpm --filter @quifox/agent-plugin-interrupt build && tsc -p tsconfig.json",
-    "typecheck": "pnpm --filter @quifox/agent-core build && pnpm --filter @quifox/agent-plugin-session build && pnpm --filter @quifox/agent-plugin-interrupt build && pnpm --filter @quifox/agent-plugin-checkpoint build && pnpm --filter @quifox/agent-plugin-events build && tsc -p tsconfig.test.json --noEmit --pretty false",
+    "build": "bun run --filter @quifox/agent-core build && bun run --filter @quifox/agent-plugin-session build && bun run --filter @quifox/agent-plugin-interrupt build && bun run --bun tsc -p tsconfig.json",
+    "typecheck": "bun run --filter @quifox/agent-core build && bun run --filter @quifox/agent-plugin-session build && bun run --filter @quifox/agent-plugin-interrupt build && bun run --filter @quifox/agent-plugin-checkpoint build && bun run --filter @quifox/agent-plugin-events build && bun run --bun tsc -p tsconfig.test.json --noEmit --pretty false",
     "test": "vitest run",
-    "check": "pnpm typecheck && pnpm test && pnpm build"
+    "check": "bun run typecheck && bun run test && bun run build"
   },
   "dependencies": {
     "@quifox/agent-core": "workspace:*",
     "@quifox/agent-plugin-interrupt": "workspace:*",
-    "@quifox/agent-plugin-session": "workspace:*"
+    "@quifox/agent-plugin-session": "workspace:*",
+    "zod": "4.4.3"
   },
   "devDependencies": {
     "@quifox/agent-plugin-model": "workspace:*",

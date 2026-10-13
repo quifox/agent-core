@@ -1,0 +1,7 @@
+OpenAI Codex
+Copyright 2025 OpenAI
+
+The evidence selection and memory prompts are adapted from openai/codex,
+commit 806d9732c974bc8a51b8317c1bd8985544fe627c, under Apache License 2.0.
+Modifications: TypeScript/Chat data model, descriptions, YAML metadata,
+owner-scoped service storage, and original-transcript verification tools.

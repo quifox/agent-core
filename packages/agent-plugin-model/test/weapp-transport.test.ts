@@ -366,13 +366,10 @@ describe('WeappHttpTransport', () => {
             harness.emitHeaders({ statusCode: 200, header: {} })
             const response = await responsePromise
             const firstChunk = response.body[Symbol.asyncIterator]().next()
-            const firstChunkFailure = expect(firstChunk).rejects.toThrow(
-                'first response byte'
-            )
-
-            await vi.advanceTimersByTimeAsync(10)
-
-            await firstChunkFailure
+            await Promise.all([
+                expect(firstChunk).rejects.toThrow('first response byte'),
+                vi.advanceTimersByTimeAsync(10)
+            ])
             expect(harness.abortCalls).toBe(1)
         } finally {
             vi.useRealTimers()
@@ -407,14 +404,14 @@ describe('WeappHttpTransport', () => {
             })
 
             const silentChunk = iterator.next()
-            const silentChunkFailure = expect(silentChunk).rejects.toThrow(
-                'stream idle timeout'
-            )
-            await vi.advanceTimersByTimeAsync(9)
-            expect(harness.abortCalls).toBe(0)
-            await vi.advanceTimersByTimeAsync(1)
-
-            await silentChunkFailure
+            await Promise.all([
+                expect(silentChunk).rejects.toThrow('stream idle timeout'),
+                (async () => {
+                    await vi.advanceTimersByTimeAsync(9)
+                    expect(harness.abortCalls).toBe(0)
+                    await vi.advanceTimersByTimeAsync(1)
+                })()
+            ])
             expect(harness.abortCalls).toBe(1)
         } finally {
             vi.useRealTimers()

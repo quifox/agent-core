@@ -1,0 +1,20 @@
+{
+  "name": "@quifox/agent-plugin-memory",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Codex v2 memory adapted to Chat conversations and shared Agent plugins",
+  "license": "Apache-2.0",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
+  "files": ["dist", "LICENSE", "NOTICE"],
+  "scripts": {
+    "build": "bun run --filter @quifox/agent-plugin-compaction build && bun run --bun tsc -p tsconfig.json",
+    "typecheck": "bun run --filter @quifox/agent-plugin-compaction build && bun run --filter @quifox/agent-plugin-request-context build && bun run --bun tsc -p tsconfig.test.json --noEmit --pretty false",
+    "test": "vitest run",
+    "check": "bun run typecheck && bun run test && bun run build && bun test/dist-import.mjs"
+  },
+  "dependencies": { "@quifox/agent-core": "workspace:*", "@quifox/agent-plugin-compaction": "workspace:*", "@quifox/agent-plugin-model": "workspace:*", "@quifox/agent-plugin-session": "workspace:*", "zod": "4.4.3" },
+  "devDependencies": { "@quifox/agent-plugin-request-context": "workspace:*", "typescript": "5.9.3", "vitest": "4.1.11" }
+}

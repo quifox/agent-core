@@ -13,10 +13,8 @@ export type DeepSeekProviderOptions = Omit<
 >
 
 /**
- * DeepSeek Flash 在 Chat Completions 中使用的高思考默认模型配置。
- *
- * 65,536 是 DeepSeek 当前 high thinking 的官方默认输出预算，而不是遗留的
- * 4K / 8K 经验值；总运行时长和 Agent 步数仍由调用方独立限制。
+ * Explicit opt-in settings for the DeepSeek example, never automatic model metadata.
+ * Callers must verify their endpoint's support and may override every value.
  */
 export const DEEPSEEK_FLASH_HIGH_THINKING_SETTINGS = {
     maxOutputTokens: 65_536,

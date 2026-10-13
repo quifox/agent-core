@@ -17,10 +17,10 @@
     }
   },
   "scripts": {
-    "build": "pnpm --filter @quifox/agent-plugin-session build && tsc -p tsconfig.json",
-    "typecheck": "pnpm --filter @quifox/agent-plugin-session build && tsc -p tsconfig.test.json --noEmit --pretty false",
+    "build": "bun run --filter @quifox/agent-plugin-session build && bun run --bun tsc -p tsconfig.json",
+    "typecheck": "bun run --filter @quifox/agent-plugin-session build && bun run --bun tsc -p tsconfig.test.json --noEmit --pretty false",
     "test": "vitest run",
-    "check": "pnpm typecheck && pnpm test && pnpm build"
+    "check": "bun run typecheck && bun run test && bun run build"
   },
   "dependencies": {
     "@quifox/agent-core": "workspace:*",

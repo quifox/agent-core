@@ -2,21 +2,30 @@
   "name": "@quifox/agent-workspace",
   "private": true,
   "type": "module",
-  "packageManager": "pnpm@10.31.0",
-  "engines": { "node": ">=22" },
+  "packageManager": "bun@1.4.0",
+  "engines": { "bun": ">=1.4.0", "node": ">=22.12.0" },
+  "workspaces": ["packages/*", "examples/*", "quifox/*"],
+  "trustedDependencies": ["esbuild"],
+  "overrides": { "vite": "6.4.4" },
   "license": "MIT",
   "scripts": {
-    "build": "pnpm -r --sort --workspace-concurrency=1 exec tsc -p tsconfig.json",
-    "typecheck": "pnpm -r --sort --workspace-concurrency=3 exec tsc -p tsconfig.test.json --noEmit --pretty false",
-    "test": "pnpm -r --workspace-concurrency=3 exec vitest run",
+    "build": "bun run --workspaces --sequential build",
+    "typecheck": "bun run --workspaces --sequential typecheck",
+    "test": "bun run --workspaces --sequential test",
     "test:coverage": "vitest run --config vitest.coverage.config.mjs",
-    "check": "pnpm build && pnpm typecheck && pnpm test"
+    "lint": "eslint packages examples quifox vitest.coverage.config.mjs eslint.config.mjs --max-warnings 0",
+    "testlint": "eslint 'packages/**/test/**/*.{ts,tsx}' 'examples/**/test/**/*.{ts,tsx}' 'quifox/**/test/**/*.{ts,tsx}' --max-warnings 0",
+    "check": "bun run build && bun run typecheck && bun run lint && bun run testlint && bun run test"
   },
   "devDependencies": {
     "@quifox/agent-core": "workspace:*",
     "@quifox/agent-plugin-model": "workspace:*",
     "@quifox/agent-plugin-session": "workspace:*",
     "@vitest/coverage-v8": "4.1.11",
+    "@eslint/js": "9.39.5",
+    "eslint": "9.39.5",
+    "typescript-eslint": "8.71.1",
+    "@vitest/eslint-plugin": "1.6.27",
     "typescript": "5.9.3",
     "vitest": "4.1.11"
   }

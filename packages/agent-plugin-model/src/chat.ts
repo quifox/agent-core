@@ -16,6 +16,8 @@ export interface ChatSessionSource {
 export interface ChatModelPluginOptions {
     session: ChatSessionSource
     model: string
+    /** Known Chat protocol dialect; omitted for a custom compatible endpoint. */
+    provider?: string
     baseUrl: string
     apiKey?: string
     headers?: HeaderSource
@@ -53,7 +55,8 @@ export class ChatModelPlugin implements AgentPlugin {
     constructor(private readonly options: ChatModelPluginOptions) {
         this.client = createOpenAICompatibleProvider({
             ...options,
-            id: 'chat'
+            id: options.provider ?? 'chat',
+            ...(options.provider === 'deepseek' && options.assistantReasoningField === undefined ? { assistantReasoningField: 'reasoning_content' as const } : {})
         }).languageModel(options.model)
         const plugin = this
         this.hooks = {
@@ -102,9 +105,9 @@ export class ChatModelPlugin implements AgentPlugin {
     }
 
     /** @param session - Child Session; parent cancellation is not inherited. */
-    fork(session: ChatSessionSource): ChatModelPlugin {
+    fork(session: ChatSessionSource, signal?: () => AbortSignal | undefined): ChatModelPlugin {
         const { signal: _signal, ...options } = this.options
-        return new ChatModelPlugin({ ...options, session })
+        return new ChatModelPlugin({ ...options, session, ...(signal ? { signal } : {}) })
     }
 
     /** Generate an isolated summary without exposing the protocol client. */

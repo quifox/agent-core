@@ -1,0 +1,1 @@
+{ "identifier": "main", "description": "Main quifox window with a Rust-owned engine bridge and window dragging", "windows": ["main"], "permissions": ["core:default", "core:window:allow-start-dragging"] }

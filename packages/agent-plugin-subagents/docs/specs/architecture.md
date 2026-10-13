@@ -1,10 +1,21 @@
 # 子智能体插件
 
-- onInitialize 注册 subagent_start 与 subagent_wait；execute 使用 ctx 中的 Conversation 能力，模型输入不包含 Context。
+- onInitialize 注册 start、send、wait、stop 四个工具；start 无 prompt 时创建待机 fork，有 prompt 时接纳首条消息并异步运行，返回稳定 taskId 与 idle/running 状态。公共 fork 方法保留为组合原语，不额外暴露模型工具。execute 使用 ctx 中的 Conversation 能力，模型输入不包含 Context。
+- start 可传 agent/model/reasoningEffort 选择，由 Host 在创建前校验并组装，插件不理解模型协议。明确配置错误保留业务错误码；首条接纳失败的回执提供已创建 taskId 与 idle 状态，调用方可检查或再次 send，不留下不可寻址子任务。
+- start 可指定独立的子任务 name，不与 Agent 角色定义的 agent 字段混淆；名称支持 Unicode 字母/数字、下划线与短横线，最长 64 字符，去除外围空白，按 NFKC 与大小写无关形式检查重复。未指定时从预设二十个人名分配，池耗尽后加数字后缀；Host 可在 createConversation 中确定会话树内实际名称。创建回执返回实际 name/taskId/状态，明确重名在创建前失败。名字分配不调用模型或执行 I/O。
 - start 的 empty 创建空历史，fork 从父未闭合工具批次之前复制完整前缀与压缩点。父 Session 不变化，子 Model 和压缩适配器重绑子 Session。
-- 子插件组合由调用方提供的 plugins(conversation, ctx) 显式构造，必须包含给定子会话；其他插件、闭包、I/O 与权限的派生或共享由调用方明确选择。
+- 子插件组合由调用方提供的 plugins(conversation, ctx, control) 显式构造，必须包含给定子会话；control 提供 taskId 与子 signal 提供者。其他插件、闭包、I/O 与权限的派生或共享由调用方明确选择。内部停止插件在新有序容器中追加，保留 Host 插件对象和顺序，不改写 Host 返回数组。
+- Host 可通过 createConversation(parent, mode, ctx, control) 显式绑定子持久化及能力组合；未提供时委托父 Conversation 的 empty/fork。onEvent(taskId, event) 消费真实子 Core 流，观察失败不改变子调用结果，不从文案推断工具或模型状态。
 - start 不等待子执行完成；插件立即持有成功/失败处理器并返回本插件的 taskId。此标识不是 Core runId。
-- wait 默认最多等待十秒，可配置有界时长；超时返回 running，不取消子任务。后续 wait 返回同一最终结果，已完成任务不重复执行。
+- fork 只创建独立会话与子插件，状态为 idle，不调用模型；后续 send 唤醒。同一子 Agent 的后续消息按接纳顺序串行运行，已结束子任务可继续接收消息。保留的是 fork 时的有效前缀，不能复原此前已经压缩掉的上下文。
+- Host 可注入 newId、onInput 和 execute。sendAsync 在 onInput 成功后才接纳并调度；onInput 拒绝时返回 SUBAGENT_ADMISSION_FAILED，子队列与原任务保持不变。execute 消费同一个子 Agent，不创建第二个循环。同步 send 只表示调用方已完成持久接纳或只使用内存组合。未注入 newId 时，默认序号跳过 restore 已保留的身份。
+- restore 重建稳定 taskId、父 Conversation 能力和独立停止边界，不调用模型；首次经过同一父 Conversation 的 Context 绑定 owner，其他父 Context 不能夺取任务。传入 running/stopping 状态不合法，重启未知操作由 Host 显式标记 unknown。recordResult 只接纳没有活跃执行者时的真实 Host 结果。
+- Host 可提供 onResolveTask，在模型工具 send/wait/stop 查询已淘汰身份前显式恢复；Host 必须验证父归属与执行租约，恢复后仍经过同一 Context 的权限检查。未提供该回调时保留纯内存淘汰行为。
+- 工具访问只允许创建该子任务的父 Context；Host 直接持有插件时可通过标识观察自己的任务。结果与等待绑定实际子调用，不从父历史补结果。
+- stop 请求只取消该子 Agent 的信号与已排队消息。正在执行的工具保留实际回执，未启动的余下调用明确记录 USER_INTERRUPTED；完整批次收口后才终止。本轮最终状态 cancelled，不保证业务回滚；之后的新消息可重新启动。模型停止由子信号驱动，不继承父信号。收尾期间拒绝新的 send；停止前已经开始的接纳完成后也不能重新唤醒该轮。
+- subagent_stop 的 waitForExit 可选择优雅终止：复用同一停止边界并有界等待真实收尾，返回 taskId/name 与结果；超时或调用方停止等待返回 stopping，实际子任务仍继续收尾。没有额外工具或第二套轮询状态，不要求模型生成假总结，不永久删除子会话。Host 可用 onStop(taskId, settled) 请求其独立执行者停止，并在 settled（当前执行与停止前接纳均已结束）之后提交队列取消和资源收尾；该收尾失败不能报告已停止。
+- onResult 发布当前队列的真实终态，观察失败不改变子调用结果。Host 将其保存为父侧结果通知，在父下一次请求中提供；通知不自动启动新模型轮。observeExecution 让 Host 直接恢复/执行子会话也进入同一 completion/结果边界，wait 不能继续返回旧终态。
+- wait 默认最多等待十秒，工具可传 timeoutMs（零到五分钟）；零表示即时查询。超时返回 running，不取消子任务。Host 可提供父信号以中断本次等待，监听和计时器在所有出口释放，父停止不自动取消独立子任务。后续 wait 返回同一最终结果，已完成任务不重复执行。
 - 完成内容读取子调用自身 Outcome.value 中的 ModelTurnResult：文本非空且没有工具调用时完成；失败 Outcome、缺少回复或不包含回复的停止产物不算完成。历史或 readOutput 不能证明本次调用产生了输出；提前停止不得返回继承的父回复，而本轮新生成的同样文本仍然有效。失败回执不暴露堆栈。子任务状态只属于本插件，等待计时器每次结束都释放。
 - 运行中的任务不被淘汰。完成或失败结果按完成顺序有界保留，默认保留最近 100 个，可由 `maxCompletedTasks` 调整；超过边界后最旧 taskId 变为不存在。保留期内重复 wait 返回同一最终结果，不重新执行子任务。
-- 当前为进程内子任务；不提供进程重启后的任务调度、父取消级联、默认递归创建或 UI 展示。
+- 插件本身保持进程内调度，不读取归档或自动重建历史任务；跨进程身份由 Host 显式 restore。父取消级联、默认递归创建与 UI 展示不属于本插件。

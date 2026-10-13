@@ -18,15 +18,15 @@ export class ExecutionCheckpointPlugin implements AgentPlugin<ChatInput>, Execut
     private entering: { call: ExecutionCheckpoint['calls'][number]; previous: ExecutionCheckpoint['calls'][number]['status'] } | undefined
 
     /** @param snapshot - 与对应 Session 快照配套的完整本轮记录。 */
-    constructor(snapshot?: ExecutionCheckpoint) {
+    constructor(snapshot?: ExecutionCheckpoint, options: { canResumeModel?(): boolean } = {}) {
         this.state = snapshot === undefined ? undefined : copySessionValue(snapshot)
         this.hooks = {
             onInitialize: async ctx => { (ctx as ConversationContext).execution = this },
             onRunStart: async (ctx, input, outcome) => {
                 (ctx as ConversationContext).execution = this
                 if ('resume' in input) {
-                    if (!this.state) { throw new Error('没有可恢复的本轮执行记录。') }
-                    this.replaying = this.state.calls.some(call => call.status !== 'completed')
+                    if (!this.state && !options.canResumeModel?.()) throw new Error('没有可恢复的本轮执行记录。')
+                    this.replaying = this.state?.calls.some(call => call.status !== 'completed') ?? false
                 } else if (this.state?.calls.some(call => call.status !== 'completed')) { throw new Error('未完成的本轮记录不能被新输入覆盖。') }
                 this.outcome = outcome
                 return { action: 'continue' }
@@ -83,6 +83,13 @@ export class ExecutionCheckpointPlugin implements AgentPlugin<ChatInput>, Execut
     fork(): ExecutionCheckpointPlugin { return new ExecutionCheckpointPlugin(this.snapshot()) }
     /** 当前轮结束后为空；宿主需要跨进程恢复时自行存储。 */
     snapshot(): ExecutionCheckpoint | undefined { return this.state === undefined ? undefined : copySessionValue(this.state) }
+
+    /** Host may roll back a failed paired Session write only while no run owns this checkpoint. */
+    restore(snapshot?: ExecutionCheckpoint): void {
+        if (this.outcome) throw new Error('活动执行记录不能被恢复快照替换。')
+        this.state = snapshot === undefined ? undefined : copySessionValue(snapshot)
+        this.replaying = false; this.entering = undefined
+    }
 
     /** @param callId - 已核实的原调用。 @param result - 真实或明确未执行的回执；同时交给 Session 接纳。 */
     confirm(callId: string, result: ToolResult): void {
