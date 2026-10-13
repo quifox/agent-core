@@ -147,12 +147,12 @@ it('stops background waits promptly, cancels their operation and preserves paire
         await fixture.runtime.command({ type: 'submit', sessionId: session.id, prompt: 'Run a background task.' }); await waiting
         await fixture.runtime.command({ type: 'stop', sessionId: session.id })
         await expect.poll(async () => (await fixture.runtime.command({ type: 'snapshot', sessionId: session.id }) as SessionView).status, { timeout: 2500 }).toBe('stopped')
+        await expect.poll(async () => (await fixture.runtime.command({ type: 'snapshot', sessionId: session.id }) as SessionView).resumeAvailable).toBe(true)
         const view = await fixture.runtime.command({ type: 'snapshot', sessionId: session.id }) as SessionView
         expect(view.backgroundTasks.every(task => task.cancelRequested)).toBe(true)
         const receipt = view.messages.find(item => item.message.role === 'tool' && item.message.toolName === 'task_wait')?.message
         expect(receipt).toBeDefined()
         expect(view.backgroundTasks.every(task => task.status !== 'running')).toBe(true)
-        await expect.poll(async () => (await fixture.runtime.command({ type: 'snapshot', sessionId: session.id }) as SessionView).resumeAvailable).toBe(true)
         await fixture.runtime.command({ type: 'resume', sessionId: session.id, mode: 'replan' }); await fixture.runtime.waitForIdle(session.id)
         expect((await fixture.runtime.command({ type: 'snapshot', sessionId: session.id }) as SessionView).messages.at(-1)?.message.content).toBe('Recovered.')
     } finally { await fixture.close(); spy.mockRestore() }
