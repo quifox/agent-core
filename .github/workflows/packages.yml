@@ -18,7 +18,7 @@ jobs:
         include:
           - runner: ubuntu-22.04
             platform: linux-x64
-            bundles: deb,appimage
+            bundles: deb
           - runner: macos-latest
             platform: macos-arm64
             bundles: dmg
@@ -57,17 +57,20 @@ jobs:
           "$cli_path" --help
       - name: Build desktop installer
         working-directory: quifox/desktop
-        env:
-          # linuxdeploy's bundled strip does not support newer ELF sections.
-          NO_STRIP: '1'
         run: bun run desktop:build -- --verbose --bundles ${{ matrix.bundles }}
+      - name: Verify packaged Linux engine bytes
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          desktop_deb=$(find quifox/desktop/src-tauri/target/release/bundle/deb -name '*.deb' -print -quit)
+          dpkg-deb --extract "$desktop_deb" "$RUNNER_TEMP/quifox-deb-check"
+          cmp quifox/desktop/src-tauri/binaries/quifox-engine-x86_64-unknown-linux-gnu "$RUNNER_TEMP/quifox-deb-check/usr/bin/quifox-engine"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: quifox-${{ matrix.platform }}
           path: |
             quifox/desktop/src-tauri/target/release/bundle/**/*.dmg
             quifox/desktop/src-tauri/target/release/bundle/**/*.deb
-            quifox/desktop/src-tauri/target/release/bundle/**/*.AppImage
             quifox/desktop/src-tauri/target/release/bundle/**/*.exe
             quifox/release/bin/*
             quifox/release/licenses/**
