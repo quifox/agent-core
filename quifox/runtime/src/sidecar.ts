@@ -52,7 +52,7 @@ try {
             if (!response) {
                 const command = envelope.command.type === 'submit' ? { ...envelope.command, messageId: envelope.command.messageId ?? id } : envelope.command
                 response = runtime.command(command as RuntimeCommand).then(value => ({ kind: 'response', id: envelope.id, ok: true, value }) as EngineFrame,
-                    () => ({ kind: 'response', id: envelope.id, ok: false, error: '操作未保存，请在本地日志查看原因。' }) as EngineFrame)
+                    () => ({ kind: 'response', id: envelope.id, ok: false, error: '操作未完成，详情见本地日志。' }) as EngineFrame)
                 pending.set(id, { identity, promise: response })
                 if (pending.size > 500) pending.delete(pending.keys().next().value!)
             }

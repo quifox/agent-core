@@ -26,6 +26,8 @@ export class DesktopEngine {
 
     constructor(private readonly port: EnginePort = nativePort) {}
 
+    get disconnected(): boolean { return this.failure !== undefined }
+
     connect(): Promise<void> {
         if (this.readiness) return this.readiness
         const generation = ++this.generation

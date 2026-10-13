@@ -59,7 +59,7 @@ function fixture(observation = false) {
         const value = command.type === 'resources' ? { workspace: '/synthetic', skillsEnabled: config.plugins.skills !== false && config.installedPlugins.includes('skills'), skills: { skills: [{ id: 'global/review', name: 'review', description: 'Review source', root: 'global', directory: 'review' }], issues: [] }, agents: { agents: [], issues: [] }, guidance: [], configSources: [], memory: session.memory } : command.type === 'plugins' ? { scope: 'configuration', plugins: [{ id: 'skills' }, { id: 'memory' }], installed: [{ id: 'skills', name: '技能', description: 'Skills', source: 'builtin', enabled: true, globalEnabled: true }, { id: 'memory', name: '记忆', description: 'Memory', source: 'builtin', enabled: true, globalEnabled: true }], marketplace: [] } : command.type === 'memory-file' ? { path: '/synthetic/memory.md', content: '', exists: true } : command.type === 'model-catalog' ? { providers: [{ id: 'deepseek', name: 'DeepSeek', baseUrl: 'https://api.deepseek.com/' }], models: [{ id: 'deepseek-flash', name: 'Flash', reasoning: true }], source: 'models.dev', cached: true } : command.type === 'submit' && routingReceipt ? structuredClone(routingReceipt) : command.type === 'snapshot' ? structuredClone(command.sessionId ? snapshot.sessions.find(item => item.id === command.sessionId) ?? session : snapshot) : command.type === 'create' ? structuredClone(session) : command.type === 'mcp' ? mcpStatus : command.type === 'project' ? { path: '.', entries: [{ name: 'report.md', kind: 'file' }], truncated: false } : { accepted: true }
         receive({ kind: 'response', id, ok: true, value: command.type === 'resources' ? { ...value, workspace: command.workspace ?? '/synthetic', config: command.workspace === '/synthetic/second project' ? projectConfig : snapshot.config } : value })
     } })
-    return { engine, commands, snapshot, session, pickWorkspace, projectConfig, publish: (event: RuntimeEvent) => receive({ kind: 'event', event }), rejectDirectory: () => { rejectDirectory = true }, failCatalog: () => { failCatalogRefresh = true }, acceptSubmissions: () => { failSubmit = false }, setRoutingReceipt: (value: InputRoutingReceipt) => { routingReceipt = value }, loseCreationAck: () => { failCreateOnce = true }, failMcp: () => { failMcpConnect = true }, setMcp: (value: typeof mcpStatus) => { mcpStatus = value }, delayConfig: () => { holdConfig = true }, delayRead: () => { holdRead = true },
+    return { engine, commands, snapshot, session, pickWorkspace, projectConfig, fatal: () => receive({ kind: 'fatal', error: 'Synthetic engine disconnected' }), publish: (event: RuntimeEvent) => receive({ kind: 'event', event }), rejectDirectory: () => { rejectDirectory = true }, failCatalog: () => { failCatalogRefresh = true }, acceptSubmissions: () => { failSubmit = false }, setRoutingReceipt: (value: InputRoutingReceipt) => { routingReceipt = value }, loseCreationAck: () => { failCreateOnce = true }, failMcp: () => { failMcpConnect = true }, setMcp: (value: typeof mcpStatus) => { mcpStatus = value }, delayConfig: () => { holdConfig = true }, delayRead: () => { holdRead = true },
         finishConfig: () => receive({ kind: 'response', id: pendingConfig, ok: true, value: {} }),
         holdProjectResources: () => { holdProjectResources = true },
         holdAutoResources: () => { holdAutoResources = true },
@@ -276,7 +276,17 @@ it('keeps the blank chat and its draft when the native directory picker fails', 
     await user.click(screen.getByRole('button', { name: '选择工作目录' })); await screen.findByRole('alert')
     expect(screen.getByRole('heading', { level: 1 })).toHaveProperty('textContent', '新的会话')
     expect(screen.getByRole('textbox', { name: '给 quifox 的消息' })).toHaveProperty('value', 'preserve after failure')
+    expect(screen.queryByRole('button', { name: '重新连接' })).toBeNull()
     expect(host.commands.some(command => command.type === 'create')).toBe(false)
+})
+
+it('offers reconnect only after the actual engine transport fails', async () => {
+    const user = userEvent.setup(), host = fixture()
+    render(<App engine={host.engine}/>); await screen.findByRole('textbox', { name: '给 quifox 的消息' })
+    await act(async () => { host.fatal() })
+    await user.click(await screen.findByRole('button', { name: '重新连接' }))
+    await expect.poll(() => screen.queryByRole('button', { name: '重新连接' })).toBeNull()
+    expect(host.engine.disconnected).toBe(false)
 })
 
 it('shows project model defaults and queries plugins for the selected folder before any conversation exists', async () => {
