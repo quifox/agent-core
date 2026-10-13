@@ -29,6 +29,19 @@ it('creates three passive children from one prefix and preserves their instructi
     } finally { unsubscribe(); await fixture.close() }
 })
 
+it('does not copy existing parent history when slash-spawn omits the fork flag', async () => {
+    const fixture = await synthetic(() => ({ text: 'done' }))
+    try {
+        const parent = await fixture.runtime.command({ type: 'create' }) as SessionView
+        await fixture.runtime.command({ type: 'submit', sessionId: parent.id, prompt: 'Private parent history.' }); await fixture.runtime.waitForIdle(parent.id)
+        const created = await fixture.runtime.command({ type: 'submit', sessionId: parent.id, prompt: '/spawn 1 assigned task' }) as Extract<InputRoutingReceipt, { kind: 'spawn' }>
+        const child = created.agents[0]!.sessionId
+        expect((await fixture.runtime.command({ type: 'snapshot', sessionId: child }) as SessionView).messages).toHaveLength(0)
+        await fixture.runtime.command({ type: 'submit', sessionId: parent.id, prompt: '@Turing Work only on your task.' }); await fixture.runtime.waitForIdle(child)
+        expect(fixture.requests.at(-1)!.messages.filter(message => message.role === 'user').map(message => message.content)).toEqual(['Work only on your task.'])
+    } finally { await fixture.close() }
+})
+
 it('validates every mention before delivery and preserves code, escaped mentions and email addresses', async () => {
     const fixture = await synthetic(() => ({ text: 'done' }))
     try {
@@ -83,7 +96,7 @@ it('preserves a batch prefix across zero successful children, later parent input
     try {
         const parent = await fixture.runtime.command({ type: 'create' }) as SessionView
         await fixture.runtime.command({ type: 'submit', sessionId: parent.id, prompt: 'original requirements' }); await fixture.runtime.waitForIdle(parent.id)
-        const input = { type: 'submit' as const, sessionId: parent.id, prompt: '/spawn 2 keep original prefix', messageId: 'zero-created-prefix' }
+        const input = { type: 'submit' as const, sessionId: parent.id, prompt: '/spawn --fork 2 keep original prefix', messageId: 'zero-created-prefix' }
         const failed = await fixture.runtime.command(input) as Extract<InputRoutingReceipt, { kind: 'spawn' }>
         expect(failed.accepted).toBe(false); expect(failed.agents).toHaveLength(0)
         spy.mockRestore()
@@ -103,10 +116,10 @@ it('checks explicit names across the whole tree and suffixes exhausted automatic
         const created = await fixture.runtime.command({ type: 'submit', sessionId: parent.id, prompt: '/spawn 21' }) as Extract<InputRoutingReceipt, { kind: 'spawn' }>
         expect(created.agents).toHaveLength(21); expect(new Set(created.agents.map(agent => agent.name)).size).toBe(21)
         expect(created.agents[20]!.name).toBe('Turing2')
-        await fixture.runtime.command({ type: 'submit', sessionId: created.agents[1]!.sessionId, prompt: 'request duplicate' }); await fixture.runtime.waitForIdle(created.agents[1]!.sessionId)
-        const child = await fixture.runtime.command({ type: 'snapshot', sessionId: created.agents[1]!.sessionId }) as SessionView
-        expect(child.messages.find(item => item.message.role === 'tool')?.message).toMatchObject({ isError: true })
-        expect(child.messages.find(item => item.message.role === 'tool')?.message.content).toContain('名称已存在')
+        await fixture.runtime.command({ type: 'submit', sessionId: parent.id, prompt: 'request duplicate' }); await fixture.runtime.waitForIdle(parent.id)
+        const root = await fixture.runtime.command({ type: 'snapshot', sessionId: parent.id }) as SessionView
+        expect(root.messages.find(item => item.message.role === 'tool')?.message).toMatchObject({ isError: true })
+        expect(root.messages.find(item => item.message.role === 'tool')?.message.content).toContain('名称已存在')
         expect((await fixture.runtime.command({ type: 'snapshot' }) as RuntimeSnapshot).sessions).toHaveLength(22)
     } finally { await fixture.close() }
 })
@@ -116,7 +129,7 @@ it('broadcasts adjacent mentions and assigns separate prompts while keeping the 
     try {
         const parent = await fixture.runtime.command({ type: 'create' }) as SessionView
         await fixture.runtime.command({ type: 'submit', sessionId: parent.id, prompt: 'original requirements' }); await fixture.runtime.waitForIdle(parent.id)
-        const created = await fixture.runtime.command({ type: 'submit', sessionId: parent.id, prompt: '/spawn 3 reviewer instructions', messageId: 'preserved-reviewers' }) as Extract<InputRoutingReceipt, { kind: 'spawn' }>
+        const created = await fixture.runtime.command({ type: 'submit', sessionId: parent.id, prompt: '/spawn --fork 3 reviewer instructions', messageId: 'preserved-reviewers' }) as Extract<InputRoutingReceipt, { kind: 'spawn' }>
         await fixture.runtime.command({ type: 'submit', sessionId: parent.id, prompt: 'later parent change' }); await fixture.runtime.waitForIdle(parent.id)
         const receipt = await fixture.runtime.command({ type: 'submit', sessionId: parent.id, prompt: '@Turing @Curie review lifecycle @Newton search related issues', messageId: 'split-assignments' }) as Extract<InputRoutingReceipt, { kind: 'dispatch' }>
         expect(receipt.deliveries.map(item => [item.agent.name, item.status])).toEqual([['Turing', 'queued'], ['Curie', 'queued'], ['Newton', 'queued']])
@@ -149,7 +162,7 @@ it('keeps names and input identities through restart and retries without duplica
     } finally { await fixture.close() }
 })
 
-it('routes to model-created children and descendants using the actual names returned by the creation tool', async () => {
+it('routes to model-created children by their actual names and prevents recursive tool or slash creation', async () => {
     const fixture = await synthetic(input => input.messages.at(-1)?.content === 'create named children' ? { calls: [
         { id: 'named', name: 'subagent_start', input: { name: 'Auditor' } }, { id: 'automatic', name: 'subagent_start', input: {} }
     ] } : input.messages.at(-1)?.content === 'create a descendant' ? { calls: [{ id: 'nested', name: 'subagent_start', input: { name: 'Nested' } }] } : { text: 'done' })
@@ -161,11 +174,15 @@ it('routes to model-created children and descendants using the actual names retu
         expect(receipts.map(item => item.name)).toEqual(['Auditor', 'Turing'])
         const auditor = (await fixture.runtime.command({ type: 'snapshot' }) as RuntimeSnapshot).sessions.find(item => item.name === 'Auditor')!
         await fixture.runtime.command({ type: 'submit', sessionId: parent.id, prompt: '@Auditor create a descendant' }); await fixture.runtime.waitForIdle(auditor.id)
-        const nested = (await fixture.runtime.command({ type: 'snapshot' }) as RuntimeSnapshot).sessions.find(item => item.name === 'Nested')!
-        const routing = await fixture.runtime.command({ type: 'submit', sessionId: parent.id, prompt: '@Nested @Turing inspect the source' }) as Extract<InputRoutingReceipt, { kind: 'dispatch' }>
-        expect(routing.accepted).toBe(true); expect(routing.deliveries.map(item => item.agent.name)).toEqual(['Nested', 'Turing'])
-        await fixture.runtime.waitForIdle(nested.id)
-        expect((await fixture.runtime.command({ type: 'snapshot', sessionId: nested.id }) as SessionView).messages.at(-1)?.message.content).toBe('done')
+        expect((await fixture.runtime.command({ type: 'snapshot' }) as RuntimeSnapshot).sessions).toHaveLength(3)
+        const childRequest = fixture.requests.find(input => input.messages.at(-1)?.content === 'create a descendant')!
+        expect(childRequest.tools.map(tool => tool.function.name)).not.toContain('subagent_start')
+        await expect(fixture.runtime.command({ type: 'submit', sessionId: auditor.id, prompt: '/spawn 1' })).rejects.toMatchObject({ code: 'SUBAGENT_DEPTH_LIMIT' })
+        const childView = await fixture.runtime.command({ type: 'snapshot', sessionId: auditor.id }) as SessionView
+        expect(childView.messages.find(item => item.message.role === 'tool')?.message).toMatchObject({ isError: true })
+        const routing = await fixture.runtime.command({ type: 'submit', sessionId: parent.id, prompt: '@Auditor @Turing inspect the source' }) as Extract<InputRoutingReceipt, { kind: 'dispatch' }>
+        expect(routing.accepted).toBe(true); expect(routing.deliveries.map(item => item.agent.name)).toEqual(['Auditor', 'Turing'])
+        await fixture.runtime.waitForIdle(auditor.id)
     } finally { await fixture.close() }
 })
 

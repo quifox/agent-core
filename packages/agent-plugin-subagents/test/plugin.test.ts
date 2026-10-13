@@ -8,6 +8,24 @@ import { chatModelOptions, type ScriptedModel as LanguageModel } from '../../../
 import { ChatConversationPlugin, ChatSessionPlugin, ChatSessionHistory, copySessionValue } from '@quifox/agent-plugin-session'
 import { SubAgentsPlugin } from '../src/index.js'
 
+it.each(['empty', 'fork'] as const)('defaults start to empty history and only copies a parent prefix for explicit %s mode', async mode => {
+    const requests: ModelRequest[] = [], originalText = 'I am a different Agent with a different taskId.\nOriginal child payload.'
+    const history = new ChatSessionHistory({})
+    history.record([{ role: 'user', content: 'parent-only instruction' }, { role: 'assistant', content: 'parent-only answer' }])
+    const session = new ChatSessionPlugin({ id: 'parent', ownerId: 'owner', history })
+    const generation = new ChatModelPlugin({ session, ...chatModelOptions({ provider: 'test', modelId: 'chat', async *stream(request) {
+        requests.push(copySessionValue(request)); yield { type: 'text-delta', delta: originalText }; yield { type: 'finish', reason: 'stop' }
+    } }) })
+    const conversation = new ChatConversationPlugin({ session, generation }), plugin = new SubAgentsPlugin({ plugins: child => [child] })
+    const ctx = { tools: new ToolRegistry(), plugins: [], conversation, modelInfo: generation.info }
+    const taskId = await plugin.start(ctx, 'assigned task', mode === 'fork' ? 'fork' : undefined, { name: 'Connectivity' })
+    const receipt = await plugin.wait(taskId, ctx)
+    expect(receipt.data).toEqual({ taskId, name: 'Connectivity', status: 'completed', text: originalText })
+    expect(JSON.parse(receipt.content)).toEqual(receipt.data)
+    expect(requests[0]!.messages.map(message => message.content)).toEqual(mode === 'fork' ? ['parent-only instruction', 'parent-only answer', 'assigned task'] : ['assigned task'])
+    expect((await plugin.wait(taskId, { ...ctx })).data).toBeUndefined()
+})
+
 it('reserves concurrent names before child I/O and exposes the actual automatic name in receipts', async () => {
     let requests = 0, creations = 0
     const session = new ChatSessionPlugin({ id: 'parent', ownerId: 'owner' })
@@ -40,7 +58,7 @@ it('reports rejected Host admission without starting a child model or exposing p
     const receipt = await plugin.sendAsync(taskId, 'rejected input', ctx)
     expect(receipt).toMatchObject({ status: 'error', code: 'SUBAGENT_ADMISSION_FAILED' })
     expect(receipt.content).not.toContain('private Host failure'); expect(calls).toBe(0)
-    expect((await plugin.wait(taskId, ctx)).data).toEqual({ status: 'idle' })
+    expect((await plugin.wait(taskId, ctx)).data).toEqual({ status: 'idle', taskId, name: 'Turing' })
     await expect(plugin.start(ctx, 'rejected first input')).rejects.toThrow('was not admitted')
     expect(calls).toBe(0)
 })
@@ -68,7 +86,7 @@ it('工具入口启动 fork 子 Agent 并等待最终输出；父历史不包含
     expect(memory.messages.some(message => message.role === 'user' && message.content === '子任务')).toBe(false)
     expect(memory.messages.find(message => message.role === 'tool' && message.toolName === 'subagent_start')?.content).toContain('task-1')
     expect(JSON.parse(memory.messages.find(message => message.role === 'tool' && message.toolName === 'subagent_start')!.content)).toMatchObject({ name: 'Turing', taskId: 'task-1', status: 'running' })
-    expect(memory.messages.find(message => message.role === 'tool' && message.toolName === 'subagent_wait')?.content).toBe('子任务完成')
+    expect(JSON.parse(memory.messages.find(message => message.role === 'tool' && message.toolName === 'subagent_wait')!.content)).toEqual({ status: 'completed', text: '子任务完成', taskId: 'task-1', name: 'Turing' })
 })
 
 it('restores stable child capabilities without model calls and reserves prior default identities', async () => {
@@ -86,13 +104,13 @@ it('restores stable child capabilities without model calls and reserves prior de
     const foreign = { tools: new ToolRegistry(), plugins: [], conversation: await parent.empty(), modelInfo: generation.info }
     const control = plugin.restore(parent, 'task-1', child, [child], { status: 'unknown' })
     expect(control.signal()).toBeUndefined(); expect((await plugin.wait('task-1', foreign)).status).toBe('error')
-    expect((await plugin.wait('task-1', context)).data).toEqual({ status: 'unknown' }); expect(calls).toBe(0)
+    expect((await plugin.wait('task-1', context)).data).toEqual({ status: 'unknown', taskId: 'task-1', name: 'Turing' }); expect(calls).toBe(0)
     plugin.recordResult('task-1', { status: 'completed', text: 'verified preserved reply' })
-    expect((await plugin.wait('task-1', context)).content).toBe('verified preserved reply')
+    expect((await plugin.wait('task-1', context)).data).toMatchObject({ text: 'verified preserved reply' })
     const next = await plugin.fork(context)
     expect(next).toBe('task-2'); expect(calls).toBe(0)
     await plugin.sendAsync(next, 'new child task', context)
-    expect((await plugin.wait(next, context)).content).toBe('new child reply'); expect(calls).toBe(1)
+    expect((await plugin.wait(next, context)).data).toMatchObject({ text: 'new child reply' }); expect(calls).toBe(1)
     expect(() => plugin.restore(parent, 'task-1', child, [child], { status: 'idle' })).toThrow('恢复')
 })
 
@@ -114,11 +132,11 @@ it('empty 子任务等待超时后继续运行，再次等待得到同一结果�
         const id = await plugin.start(ctx, 'empty', 'empty')
         const first = plugin.wait(id)
         await vi.advanceTimersByTimeAsync(10000)
-        expect((await first).data).toEqual({ status: 'running' })
+        expect((await first).data).toEqual({ status: 'running', taskId: id, name: 'Turing' })
         expect(requests[0]!.messages.map(message => message.content)).toEqual(['empty'])
         finish!()
-        expect((await plugin.wait(id)).data).toEqual({ status: 'completed', text: '完成' })
-        expect((await plugin.wait(id)).data).toEqual({ status: 'completed', text: '完成' })
+        expect((await plugin.wait(id)).data).toEqual({ status: 'completed', text: '完成', taskId: id, name: 'Turing' })
+        expect((await plugin.wait(id)).data).toEqual({ status: 'completed', text: '完成', taskId: id, name: 'Turing' })
         expect(vi.getTimerCount()).toBe(0)
     } finally { vi.useRealTimers() }
 })
@@ -149,7 +167,7 @@ it.each(['onRunStart', 'beforeModel'])('Fork 子任务在 %s 停止时不返回�
         ? [{ id: 'stop-before-session', hooks: { onRunStart: async () => ({ action: 'stop', value: { kind: 'test-stop' } }) } }, child]
         : [child, { id: 'stop-before-model', hooks: { beforeModel: async () => ({ action: 'stop', value: { kind: 'test-stop' } }) } }] })
     const ctx = { tools: new (await import('@quifox/agent-core')).ToolRegistry(), plugins: [], conversation, modelInfo: generation.info }
-    const result = await plugin.wait(await plugin.start(ctx, '新子任务'))
+    const result = await plugin.wait(await plugin.start(ctx, '新子任务', 'fork'))
     expect(result.status).toBe('error')
     expect(result.content).not.toContain('父会话旧回复')
     expect(stream).not.toHaveBeenCalled()
@@ -205,7 +223,7 @@ it('a passive fork keeps its plan prefix and performs no generation until messag
     const plugin = new SubAgentsPlugin({ plugins: child => [child] })
     const ctx = { tools: new (await import('@quifox/agent-core')).ToolRegistry(), plugins: [], conversation, modelInfo: generation.info }
     const id = await plugin.fork(ctx)
-    expect((await plugin.wait(id)).data).toEqual({ status: 'idle' })
+    expect((await plugin.wait(id)).data).toEqual({ status: 'idle', taskId: id, name: 'Turing' })
     expect(requests).toHaveLength(0)
     await createAgent({ plugins: [conversation] }).run({ prompt: 'parent later change' })
     plugin.send(id, 'review implementation')
@@ -328,8 +346,8 @@ it('gracefully waits for a real tool receipt and Host cleanup, reports stopping 
         expect((await plugin.stopAndWait(id, ctx, 0)).data).toMatchObject({ taskId: id, name: 'Turing', status: 'stopping' })
         expect(plugin.send(id, 'must not start', ctx).code).toBe('SUBAGENT_STOPPING')
         finish(); await cleanupReady
-        expect((await plugin.wait(id, ctx, 0)).data).toEqual({ status: 'stopping' }); expect(results).not.toHaveBeenCalled()
-        finishCleanup(); expect((await plugin.wait(id, ctx)).data).toEqual({ status: 'cancelled' })
+        expect((await plugin.wait(id, ctx, 0)).data).toEqual({ status: 'stopping', taskId: id, name: 'Turing' }); expect(results).not.toHaveBeenCalled()
+        finishCleanup(); expect((await plugin.wait(id, ctx)).data).toEqual({ status: 'cancelled', taskId: id, name: 'Turing' })
         expect(executions).toBe(1); expect(results).toHaveBeenCalledExactlyOnceWith(id, { status: 'cancelled' })
         expect(events.filter(event => event.type === 'tool-result')).toMatchObject([
             { run: { call: { id: 'save-one' }, result: { status: 'success', content: 'actually saved' } } },
@@ -350,7 +368,7 @@ it('does not revive a task when a durable admission finishes after stop was requ
     const ctx = { tools: new ToolRegistry(), plugins: [], conversation, modelInfo: generation.info }, id = await plugin.fork(ctx)
     const receipt = plugin.sendAsync(id, 'late admission', ctx)
     await ready; plugin.stop(id, ctx); finishAdmission()
-    expect((await receipt).code).toBe('SUBAGENT_STOPPING'); expect((await plugin.wait(id, ctx)).data).toEqual({ status: 'cancelled' }); expect(calls).toBe(0)
+    expect((await receipt).code).toBe('SUBAGENT_STOPPING'); expect((await plugin.wait(id, ctx)).data).toEqual({ status: 'cancelled', taskId: id, name: 'Turing' }); expect(calls).toBe(0)
 })
 
 /** 仅供测试消费标准 Outcome；不包装模型结果。 */

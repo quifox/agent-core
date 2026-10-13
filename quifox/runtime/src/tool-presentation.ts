@@ -20,7 +20,7 @@ export function toolSummary(call: Pick<ToolCall, 'name' | 'input'>): string {
     if (call.name === 'write_file') return `写入 ${path}`
     if (call.name === 'apply_patch') return `修改 ${path}`
     if (call.name === 'run_command') return `在 ${typeof input.cwd === 'string' ? input.cwd : '工作目录'} 执行 ${String(input.command ?? '').slice(0, 160)}`
-    if (call.name === 'subagent_start') return `创建 ${typeof input.agent === 'string' ? input.agent : '子 Agent'}${input.prompt ? '并启动任务' : '，保存上下文待机'}`
+    if (call.name === 'subagent_start') return `创建 ${typeof input.agent === 'string' ? input.agent : '子 Agent'}${input.prompt ? '并启动任务' : input.mode === 'fork' ? '，复制父上下文并待机' : '，空历史待机'}`
     if (call.name === 'subagent_send') return '向子 Agent 发送后续任务'
     if (call.name === 'subagent_wait') return '等待子 Agent 回复'
     if (call.name === 'subagent_stop') return '停止子 Agent'

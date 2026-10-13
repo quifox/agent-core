@@ -2,6 +2,8 @@
 
 [English](README.md) | 简体中文
 
+start 默认空历史，显式 `mode: "fork"` 才复制父安全前缀。wait 与优雅 stop 的回包提供实际 taskId/name/status，完成原文独立保存在 text，不从子文本猜身份。公共 `fork()` 组合原语保留其明确的分叉语义。
+
 注册 `subagent_start`、`subagent_send`、`subagent_wait` 与 `subagent_stop`。start 支持 `empty` 与 `fork`；省略 `prompt` 创建待机子会话，不请求模型。可选 `agent`、`model`、`reasoningEffort` 由 Host 解析。`name` 可指定名称，省略时自动命名；重复名称会报错。创建和发送回执返回实际名称与任务 ID。send 唤醒同一子 Agent，后续消息按接纳顺序运行。wait 支持 `timeoutMs`（0–300000），默认十秒；超时返回 running，不取消子任务。
 
 `subagent_stop` 可传 `waitForExit: true` 与可选 `timeoutMs`，请求优雅终止并等待真实收尾；超时返回 `stopping`。Host 方法 `stopAndWait` 使用同一边界，`onStop(taskId, settled)` 先请求停止执行者、在 settled 后提交队列取消和资源收尾。`onResult` 可向父会话发布结果通知，不自动启动新模型轮；手动恢复的子执行通过 `observeExecution` 接入同一 wait/stop 生命周期。

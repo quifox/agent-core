@@ -724,7 +724,7 @@ export class QuiFoxRuntime {
             entry.taskRuns.set(task.id, event.runId)
         }
         const planTools = new Set<string>()
-        const allowed = (name: string): boolean => (entry.config.memory.enabled || !name.startsWith('memory_')) && toolAllowed(name, entry.metadata.toolScopes, entry.metadata.toolDenylist) &&
+        const allowed = (name: string): boolean => (!entry.metadata.parentId || name !== 'subagent_start') && (entry.config.memory.enabled || !name.startsWith('memory_')) && toolAllowed(name, entry.metadata.toolScopes, entry.metadata.toolDenylist) &&
             toolAllowed(name, definition?.tools ? [definition.tools] : [], definition?.disallowedTools) && (definition?.permissionMode !== 'plan' || planTools.has(name))
         const approvalMode = (): 'ask' | 'allow' | 'deny' => entry.metadata.approvalMode === 'deny' || definition?.permissionMode === 'dontAsk' || definition?.permissionMode === 'plan' ? 'deny' : entry.metadata.approvalMode ?? entry.config.approval
         entry.permissions = new PermissionGate({ sessionId: saved.metadata.id, mode: approvalMode, allowed, signal: () => this.signal(entry),
@@ -817,7 +817,8 @@ export class QuiFoxRuntime {
                 for (const tool of ctx.tools.values()) if (!allowed(tool.name)) ctx.tools.remove(tool.name)
             },
             beforeModel: async ctx => {
-                entry.context.set('agent-role', [definition?.instructions, entry.metadata.initialInstructions].filter(Boolean).join('\n\n'))
+                const identity = entry.metadata.parentId ? `You are child Agent ${this.childName(entry)}. Your taskId is ${entry.metadata.taskId}; your parent conversation is ${entry.metadata.parentId}. Perform the latest assigned task. Inherited history is background context. Report your own result, without impersonating the parent. You cannot create further child Agents.` : undefined
+                entry.context.set('agent-role', [identity, definition?.instructions, entry.metadata.initialInstructions].filter(Boolean).join('\n\n'))
                 entry.context.set('agent-definitions', ctx.tools.get('subagent_start') && agents.agents.length ? `Available Agent definitions for subagent_start. Their tool access cannot exceed yours.\n${JSON.stringify(agents.agents.map(({ name, description, model }) => ({ name, description, model })))}` : '')
                 const results = entry.events.filter(event => event.type === 'subagent-result').slice(-20).map(event => event.data)
                 entry.context.set('subagent-results', results.length ? `Verified child task results. Notifications do not imply a new user request.\n${JSON.stringify(displayValue(results, 20_000).value)}` : '')
@@ -913,6 +914,7 @@ export class QuiFoxRuntime {
     private async createChild(entry: Entry, owner: AgentContext, control: SubAgentControl, mode: 'empty' | 'fork', catalog: unknown,
         prepared?: { id: string; creationIdentity: string; stopEpoch: number; instructions?: string; source: ChatSessionSnapshot; origins: SavedState['origins'] }): Promise<Entry> {
         if (this.closed) throw new Error('quifox 已关闭。')
+        if (entry.metadata.parentId) throw new SubAgentRequestError('当前子 Agent 不允许继续创建后代；请由主会话创建子任务。', 'SUBAGENT_DEPTH_LIMIT')
         const stopEpoch = prepared?.stopEpoch ?? entry.stopEpoch, creationSignal = this.signal(entry)
         const checkCreation = (): void => { if (entry.stopEpoch !== stopEpoch || creationSignal?.aborted) throw new SubAgentRequestError('子 Agent 创建已被停止。', 'USER_INTERRUPTED') }
         checkCreation()
@@ -962,7 +964,8 @@ export class QuiFoxRuntime {
         if (spawn) {
             const stopEpoch = entry.stopEpoch
             if (!pluginEnabled(entry.config, 'subagents')) throw new Error('子智能体插件已停用。')
-            await this.admitRouting(entry, prompt, messageId, [], true)
+            if (entry.metadata.parentId) throw new SubAgentRequestError('当前子 Agent 不允许继续创建后代；请由主会话创建子任务。', 'SUBAGENT_DEPTH_LIMIT')
+            await this.admitRouting(entry, prompt, messageId, [], spawn.mode)
             const identity = JSON.stringify({ parentId: entry.metadata.id, prompt }), key = `${entry.metadata.id}:${messageId}`
             const previous = this.spawnOperations.get(key)
             if (previous) { if (previous.identity !== identity) throw new Error('子 Agent 创建身份与参数不一致。'); return previous.work }
@@ -1002,7 +1005,7 @@ export class QuiFoxRuntime {
         return (entry.events.find(event => event.type === 'input-routing-admission' && (event.data as { id: string }).id === id)?.data as { signature: string } | undefined)?.signature
     }
 
-    private async admitRouting(entry: Entry, prompt: string, messageId: string, recipients: string[][], freeze = false): Promise<void> {
+    private async admitRouting(entry: Entry, prompt: string, messageId: string, recipients: string[][], mode?: 'empty' | 'fork'): Promise<void> {
         const id = this.inputId(entry.metadata.id, messageId, 'routing-admission')
         const signature = createHash('sha256').update(JSON.stringify({ prompt, recipients })).digest('hex')
         const previous = this.routingAdmission(entry, messageId), pending = this.routingAdmissions.get(id)
@@ -1012,7 +1015,7 @@ export class QuiFoxRuntime {
             return
         }
         if (entry.inputOrigins[messageId]) throw new Error('此输入身份已用于普通消息。')
-        const snapshot = freeze ? entry.session.fork({ id: randomUUID(), boundary: 'before-tools' }).snapshot() : undefined
+        const snapshot = mode ? (mode === 'fork' ? entry.session.fork({ id: randomUUID(), boundary: 'before-tools' }) : entry.session.empty({ id: randomUUID() })).snapshot() : undefined
         const source = snapshot ? { session: snapshot, origins: Object.fromEntries(snapshot.history.map(item => [item.id, entry.origins[item.id] ?? 'context'])) } : undefined
         const work = this.publish(entry, 'input-routing-admission', { id, signature, ...(source ? { source } : {}) })
         this.routingAdmissions.set(id, { signature, work })
@@ -1024,7 +1027,7 @@ export class QuiFoxRuntime {
         return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-8${hex.slice(17, 20)}-${hex.slice(20, 32)}`
     }
 
-    private async spawnChildren(entry: Entry, input: { count: number; instructions?: string }, messageId: string, identity: string, stopEpoch: number): Promise<InputRoutingReceipt> {
+    private async spawnChildren(entry: Entry, input: { count: number; mode: 'empty' | 'fork'; instructions?: string }, messageId: string, identity: string, stopEpoch: number): Promise<InputRoutingReceipt> {
         const checkCreation = (): void => { if (entry.stopEpoch !== stopEpoch) throw new SubAgentRequestError('子 Agent 创建已被停止。', 'USER_INTERRUPTED') }
         checkCreation()
         const owner = await this.prepareContext(entry)
@@ -1043,7 +1046,7 @@ export class QuiFoxRuntime {
             if (original?.metadata.creationIdentity !== identity) throw new Error('子 Agent 创建身份与参数不一致。')
             frozen = { session: original.session, origins: original.origins }
         } else {
-            const source = entry.session.fork({ id: randomUUID(), boundary: 'before-tools' }).snapshot()
+            const source = (input.mode === 'fork' ? entry.session.fork({ id: randomUUID(), boundary: 'before-tools' }) : entry.session.empty({ id: randomUUID() })).snapshot()
             frozen = { session: source, origins: Object.fromEntries(source.history.map(item => [item.id, entry.origins[item.id] ?? 'context'])) }
         }
         const receipt: Extract<InputRoutingReceipt, { kind: 'spawn' }> = { kind: 'spawn', accepted: true, agents: [], errors: [] }
@@ -1055,14 +1058,14 @@ export class QuiFoxRuntime {
                 if (!child) {
                     const taskId = this.inputId(entry.metadata.id, messageId, `task-${index}`)
                     const control: SubAgentControl = { taskId, signal: () => undefined }
-                    child = await this.createChild(entry, owner, control, 'fork', this.catalog, { id, creationIdentity: identity, stopEpoch,
+                    child = await this.createChild(entry, owner, control, input.mode, this.catalog, { id, creationIdentity: identity, stopEpoch,
                         ...(input.instructions ? { instructions: input.instructions } : {}), source: frozen.session, origins: frozen.origins })
                     child.child = { parent: entry, owner, control: entry.subagents.restore(entry.conversation, taskId, child.conversation, child.plugins, { status: 'idle' }, this.childName(child)) }
                 }
                 receipt.agents.push({ sessionId: id, taskId: child.metadata.taskId!, name: this.childName(child), status: child.status })
             } catch { receipt.accepted = false; receipt.errors.push(`第 ${index + 1} 个子 Agent 未创建，请重试同一条输入。`) }
         }
-        await this.publish(entry, 'input-routing', { messageId, input: `/spawn ${input.count}${input.instructions ? ` ${input.instructions}` : ''}`, receipt }).catch(() => {})
+        await this.publish(entry, 'input-routing', { messageId, input: `/spawn ${input.mode === 'fork' ? '--fork ' : ''}${input.count}${input.instructions ? ` ${input.instructions}` : ''}`, receipt }).catch(() => {})
         return receipt
     }
 

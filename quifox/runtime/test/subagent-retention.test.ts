@@ -33,7 +33,8 @@ it('restores evicted durable children through parent tools without granting anot
         const after = await fixture.runtime.command({ type: 'snapshot', sessionId: first.id }) as SessionView
         expect(after.messages.at(-1)?.message.content).toBe('durable child reply')
         const parentView = await fixture.runtime.command({ type: 'snapshot', sessionId: parent.id }) as SessionView
-        expect([...parentView.messages].reverse().find(message => message.message.role === 'tool' && message.message.toolName === 'subagent_wait')?.message.content).toBe('durable child reply')
+        const waited = [...parentView.messages].reverse().find(message => message.message.role === 'tool' && message.message.toolName === 'subagent_wait')!
+        expect(JSON.parse(waited.message.content)).toEqual({ status: 'completed', text: 'durable child reply', taskId, name: first.name })
         await fixture.runtime.command({ type: 'submit', sessionId: parent.id, prompt: 'stop old' }); await fixture.runtime.waitForIdle(parent.id)
         expect([...(await fixture.runtime.command({ type: 'snapshot', sessionId: parent.id }) as SessionView).messages].reverse().find(message => message.message.role === 'tool')?.message.content).toContain('请求停止')
         const stranger = await fixture.runtime.command({ type: 'create' }) as SessionView

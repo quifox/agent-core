@@ -2,6 +2,8 @@
 
 English | [简体中文](README.zh-CN.md)
 
+Start defaults to empty history. Pass `mode: "fork"` explicitly to copy the safe parent prefix. Wait and graceful-stop payloads expose authoritative `taskId`, `name`, and `status`; completed text remains in `text`, without deriving identity from that text. The public `fork()` composition primitive keeps its explicit fork semantics.
+
 Registers `subagent_start`, `subagent_send`, `subagent_wait`, and `subagent_stop`. Start supports empty/fork; omitting `prompt` creates an idle child without a model request. Optional `agent`, `model`, and `reasoningEffort` selections are resolved by the Host. Set `name` for a readable identity, or omit it for automatic naming; duplicate names are rejected. Creation and send receipts expose the actual name and task ID. Send wakes the same child. Further messages run in admission order. Wait accepts `timeoutMs` (0–300000), defaults to ten seconds, and never cancels the child on timeout.
 
 ```ts
