@@ -72,6 +72,7 @@ export interface ChildMainDeps {
    * lowered 体之前于同一 context 内运行，读写 BOOTSTRAP 用 `var` 建下的 context 全局。
    */
   streamsBootstrap: string;
+  nodeContext: { run<T>(id: string, callback: () => T): T; getStore(): string | undefined };
 }
 
 /**
@@ -102,6 +103,7 @@ export function childMain(deps: ChildMainDeps): Promise<void> {
 var __nextLocal = 0;
 var __nextReq = 0;
 var __pending = new Map();
+var __nextCall = 0;
 // 本世已补全的留白：站点 id → 体的文本。同一站点再次到达（循环）时直接求值，不再过线。
 var __fills = new Map();
 
@@ -173,6 +175,27 @@ function __enterPhase(name) {
   __emit({ kind: "event", type: "phase-entered", name: String(name) });
 }
 
+function __node(definitionId, callback) {
+  var callId = "call:" + (++__nextCall);
+  var parentCallId = __nodeContextGet();
+  __emit({kind: "event", type: "call-started", definitionId: definitionId, callId: callId, parentCallId: parentCallId});
+  var finish = function (outcome) {
+    __emit({kind: "event", type: "call-settled", definitionId: definitionId, callId: callId, parentCallId: parentCallId, outcome: outcome});
+  };
+  try {
+    var result = __nodeContextRun(callId, callback);
+    if (result instanceof Promise) {
+      result.then(function () { finish("ok"); }, function () { finish("error"); });
+    } else {
+      finish("ok");
+    }
+    return result;
+  } catch (error) {
+    finish("error");
+    throw error;
+  }
+}
+
 function __publishArtifact(siteId, op, args) {
   // 内容产物是效应：脚本 await 它、要能 catch 它的拒绝，所以与 ask / world-read 同走
   // request/response。args 是 lowering 打包的位置实参（[id, path|content, opts]），原样透传。
@@ -215,6 +238,7 @@ globalThis.__host = {
   report: __report,
   log: __log,
   enterPhase: __enterPhase,
+  node: __node,
   hole: __hole,
 };
 
@@ -320,10 +344,14 @@ Math.random = function () {
     __deliver: (line: string) => void;
     __execute: (runFn: unknown) => Promise<void>;
     __checkStalled: () => boolean;
+    __nodeContextRun: <T>(id: string, callback: () => T) => T;
+    __nodeContextGet: () => string | undefined;
   };
   sandbox.__send = (line) => {
     deps.stdout.write(`${line}\n`);
   };
+  sandbox.__nodeContextRun = (id, callback) => deps.nodeContext.run(id, callback);
+  sandbox.__nodeContextGet = () => deps.nodeContext.getStore();
   deps.vm.createContext(sandbox, { name: "workflow-sandbox" });
   deps.vm.runInContext(BOOTSTRAP, sandbox, { filename: "workflow-bootstrap.js" });
   deps.vm.runInContext(deps.streamsBootstrap, sandbox, { filename: "workflow-streams.js" });
@@ -412,6 +440,7 @@ import { realpathSync } from "node:fs";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 import { setFlagsFromString } from "node:v8";
+import { AsyncLocalStorage } from "node:async_hooks";
 import vm from "node:vm";
 
 export const payload = ${JSON.stringify(payload)};
@@ -421,7 +450,7 @@ export const streamsBootstrap = ${JSON.stringify(CELL_STREAMS_BOOTSTRAP)};
 
 const main = ${childMain.toString()};
 
-export const start = (deps) => main({ ...deps, payload, streamsBootstrap });
+export const start = (deps) => main({ ...deps, payload, streamsBootstrap, nodeContext: new AsyncLocalStorage() });
 
 if (
   typeof payload.maxOldSpaceSizeMb === "number" &&

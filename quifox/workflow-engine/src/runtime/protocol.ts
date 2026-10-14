@@ -104,7 +104,18 @@ export type EventMessage =
   | LogEventMessage
   | ReportEventMessage
   | DeclareArtifactEventMessage
-  | PhaseEnteredEventMessage;
+  | PhaseEnteredEventMessage
+  | CallEventMessage;
+
+/** Function-call observations are distinct from checkpointed Agent operations. */
+export interface CallEventMessage {
+  kind: "event";
+  type: "call-started" | "call-settled";
+  definitionId: string;
+  callId: string;
+  parentCallId?: string;
+  outcome?: "ok" | "error";
+}
 
 /**
  * 控制流经过了一个 `phase("…")` 标记。走事件通道：脚本从不 await 它；无站点、不落 journal，父进程只让引擎发一条

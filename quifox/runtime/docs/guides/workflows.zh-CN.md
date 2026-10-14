@@ -4,9 +4,9 @@
 
 在插件页启用工作流插件后，typescript-workflows Skill 自动进入现有技能目录。Agent 可以渐进加载编写指南、可用业务插件、恢复说明和模板，不增加单独的文档工具。
 
-脚本使用普通 TypeScript、agent().ask()、分支和 Promise.all，可选函数 JSDoc @phase 标注阶段；同一份源码由固定版本的 [ZCode](https://github.com/zai-org/ZCode) 派生引擎分析与执行，无须维护图 JSON。当前支持 agent、args、phase、log 与普通 TypeScript，不暴露上游 world/artifact/hole API；脚本没有 import 或直接网络/文件系统能力。
+脚本使用普通 TypeScript、agent().ask()、分支和 Promise.all，具名方法使用 JSDoc `@node 标签`（也兼容 `@phase 标签`）；同一 TypeScript Program 由固定版本的 [ZCode](https://github.com/zai-org/ZCode) 派生引擎分析与执行，无须维护图 JSON。初始图展示可解析的方法调用关系，不推断执行顺序或本轮必经路径。当前支持 agent、args、phase、log 与普通 TypeScript，不暴露上游 world/artifact/hole API；脚本没有 import 或直接网络/文件系统能力。
 
-对话中的 dynamic-workflow 围栏渲染成工作流图卡。运行打开右侧测试面板，保存写入 ~/.quifox/workflows。顶级工作流页左图右对话，沿用现有多轮会话；左侧列出脚本和推荐模板，支持导入 .ts 文件并校验。点击阶段展开步骤，分支、汇合和循环边由代码生成，状态来自实际执行事件。
+对话中的 dynamic-workflow 围栏渲染成工作流图卡。运行打开右侧测试面板，保存写入 ~/.quifox/workflows。顶级工作流页左图右对话，沿用现有多轮会话；左侧列出脚本和推荐模板，支持导入 .ts 文件并校验。图支持缩放、平移和适合窗口。运行后方法节点汇总已观测调用次数与状态，点击查看详情，也可切换“调用实例”观察嵌套、并行和循环的真实父子关系。静态边为虚线，真实调用使连线变为实线；动态派发在运行时补充实际关系。恢复和新回合各有独立执行身份，不混合旧状态。界面使用有限观测窗口，次数描述当前窗口内的记录。
 
 [编写 Skill](../../skills/typescript-workflows/SKILL.md) 包含通用知识检索示例。并行模板改写追问、同时检索直接证据与冲突证据，再按来源回答，不固定考试、年份或知识库。每个工作流回合新建内部 Agent；同一回合复用变量保留其上下文。args.messages 只传入外层用户与助手输入输出。
 

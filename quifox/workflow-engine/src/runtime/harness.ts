@@ -43,7 +43,7 @@ import {
   type WorkflowDriver,
   type WorkflowReportSink,
 } from "../index.js";
-import { type ChildMessage, type ChildPayload, type ResponseMessage } from "./protocol.js";
+import { type ChildMessage, type ChildPayload, type ResponseMessage, type CallEventMessage } from "./protocol.js";
 import { renderChildEntry } from "./child-source.js";
 import { writeChildEntryFile, type HarnessWarning } from "./child-entry-file.js";
 
@@ -83,6 +83,7 @@ export interface RunControlBinding {
  * 这份自洽性归调用方所有。
  */
 export interface RunWorkflowOptions {
+  onCall?(event: CallEventMessage): void;
   /**
    * 作者写的 workflow 脚本源码，两个用途：
    * 1. `lowered` 缺省时由 harness lower 它得到执行体；
@@ -308,7 +309,7 @@ export async function runWorkflowScript(options: RunWorkflowOptions): Promise<Ru
     return engine.settled;
   }
 
-  return bridge({ child, engine, runId, signal: options.signal, timeoutMs: options.timeoutMs });
+  return bridge({ child, engine, runId, signal: options.signal, timeoutMs: options.timeoutMs, ...(options.onCall ? { onCall: options.onCall } : {}) });
 }
 
 /** 解析 lowered 体：优先 `lowered`，否则 lower `scriptText`（脏脚本抛错，不启动子进程）。 */
@@ -328,6 +329,7 @@ function resolveLowered(options: RunWorkflowOptions): string {
 }
 
 interface BridgeDeps {
+  onCall?: ((event: CallEventMessage) => void) | undefined;
   child: ChildProcess;
   engine: WorkflowEngine;
   /** 只用于 abort 归一里的错误文本（"interrupted" 那一支要指名是哪个 run 被关掉的）。 */
@@ -446,7 +448,7 @@ function bridge(deps: BridgeDeps): Promise<RunSettlement> {
         );
         return;
       }
-      handleChildMessage(message, { engine, actorMap, child, failRun });
+      handleChildMessage(message, { engine, actorMap, child, failRun, ...(deps.onCall ? { onCall: deps.onCall } : {}) });
     });
 
     child.on("error", (error) => {
@@ -466,6 +468,7 @@ function bridge(deps: BridgeDeps): Promise<RunSettlement> {
 }
 
 interface MessageDeps {
+  onCall?: ((event: CallEventMessage) => void) | undefined;
   engine: WorkflowEngine;
   actorMap: Map<string, ActorId>;
   child: ChildProcess;
@@ -508,7 +511,9 @@ function handleChildMessage(message: ChildMessage, deps: MessageDeps): void {
         engine.declareArtifact(message.siteId, message.op, message.args);
       } else if (message.type === "phase-entered") {
         engine.enterPhase(message.name);
-      } else {
+      } else if (message.type === "call-started" || message.type === "call-settled") {
+        deps.onCall?.(message);
+      } else if (message.type === "log") {
         engine.log(message.message);
       }
       return;

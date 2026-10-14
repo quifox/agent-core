@@ -18,6 +18,8 @@ QuiFox 提供默认执行循环与覆盖生命周期的 Hook。插件提供模�
 
 **[QuiFox TUI 与桌面端](quifox/)** 基于共享 runtime 提供可交互的应用。[中文应用指南](quifox/README.zh-CN.md) 统一说明终端安装、源码启动与模型配置。
 
+[工作流工作台](quifox/runtime/docs/guides/workflows.zh-CN.md) 支持可复用的 TypeScript 多 Agent 脚本，展示静态调用图与运行时调用状态。
+
 ## 设计演示
 
 从生命周期 Hook 出发，展示会话、中断与恢复、插件组合、运行追踪、Code Mode 与平级 Agent 协作，并通过应用示例说明这些能力如何组合使用。

@@ -970,13 +970,13 @@ export class QuiFoxRuntime {
             await unlink(join(workflowRunsDir(this.paths.root), file.slice(-70, -6) + '.mjs')).catch(cause => { if ((cause as NodeJS.ErrnoException).code !== 'ENOENT') throw cause })
             await unlink(join(directory, file))
         }))
-        const storageAbort = new AbortController()
+        const storageAbort = new AbortController(), executionId = randomUUID()
         const journal = workflowJournal(join(directory, prefix + inputHash + '-' + identity + '.jsonl'), identity, value => this.redact(value), cause => { queueMicrotask(() => {
             storageAbort.abort(cause)
-            const fact = this.publish(entry, 'workflow', { type: 'checkpoint-failed', code: 'storage-failure' }); facts.push(fact); void fact.catch(() => {})
+            const fact = this.publish(entry, 'workflow', { type: 'checkpoint-failed', code: 'storage-failure', executionId }); facts.push(fact); void fact.catch(() => {})
         }) })
         try {
-            const value = await runWorkflow({ script, args, runId: identity, journal, cwd: this.paths.root, signal: this.signal(entry) ? AbortSignal.any([this.signal(entry)!, storageAbort.signal]) : storageAbort.signal,
+            const value = await runWorkflow({ script, args, runId: identity, executionId, journal, cwd: this.paths.root, signal: this.signal(entry) ? AbortSignal.any([this.signal(entry)!, storageAbort.signal]) : storageAbort.signal,
                 ...(process.versions.bun ? { childSpawn: { argsPrefix: /^(quifox-engine|quifox(?:\.exe)?$)/.test(basename(process.execPath)) ? ['--quifox-workflow-child'] : ['run'] } } : {}),
                 emit: event => { if (journal.failure) return; const fact = this.publish(entry, 'workflow', event); facts.push(fact); void fact.catch(() => {}) },
                 error: cause => { facts.push(this.diagnostics.write('workflow-agent', this.redact(cause instanceof Error ? { message: cause.message, stack: cause.stack } : cause))) },

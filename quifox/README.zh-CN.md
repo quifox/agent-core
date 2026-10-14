@@ -19,6 +19,10 @@ QuiFox 是本仓库的终端与桌面应用层，将 [Core 与框架插件](../R
 
 两个界面向同一个 runtime 提交命令并展示其事件。Desktop 的 Rust 桥负责原生窗口和 sidecar 进程。Core 与通用插件位于 `../packages/`；`../examples/` 保存框架组合示例。
 
+## 工作流工作台
+
+启用工作流插件后，可检查、保存和运行 TypeScript 多 Agent 脚本。Desktop 将方法调用图与多轮对话并排展示，支持实际调用状态、缩放和平移。脚本可追加知识检索等已启用业务插件。编写方式、恢复模板与认证本地 API 部署见[工作流指南](runtime/docs/guides/workflows.zh-CN.md)。
+
 ## 安装终端应用
 
 npm 安装包名称为 `quifox`，提供 TUI。需要 Node.js 22.12 或更新版本，安装产物无须 Bun。

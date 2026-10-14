@@ -11,7 +11,8 @@ Globals:
 
 - args.question: current question; args.messages: outer user/assistant I/O history, without internal tool traces.
 - agent(name?, {system?, model?, plugins?, tools?}).ask<T>(instructions): ask an Agent. model is a configured Host profile ID, not a URL. tools optionally narrows the parent tool permissions. Omit T for text; an interface T produces a validated structured result with repair feedback.
-- phase("Label") or optional function JSDoc @phase Label: graph phase labels.
+- Label every named function or method with JSDoc `@node Label` (`@phase Label` is an equivalent label). Anonymous callbacks may remain implementation details. Do not use experimental decorators or write edges. The initial graph shows resolved calls; runtime tracing adds actual parent/child invocations and their states, including loops and parallel calls.
+- phase("Label"): an optional progress marker, not a graph node.
 - log(message): progress. Promise.all, branches, loops and helper functions retain ordinary TypeScript semantics.
 
 Read plugins.md with skill_read for enabled business plugins, their tools and examples. Infrastructure is already included and intentionally omitted. Only registered enabled plugin IDs can be appended. Retrieval tools are also directly callable outside a workflow.

@@ -19,6 +19,10 @@ QuiFox is the terminal and desktop application layer of this monorepo. It compos
 
 Both interfaces submit commands to the same runtime and display its events. Desktop's Rust bridge owns the native window and sidecar process. Core and reusable plugins live in `../packages/`; `../examples/` contains framework composition examples.
 
+## Workflow workbench
+
+Enable Workflows to inspect, save and run TypeScript multi-Agent scripts. Desktop shows the method-call graph alongside a multi-turn conversation, with actual invocation states, zoom and pan. Scripts can append enabled business plugins such as knowledge retrieval. See the [workflow guide](runtime/docs/guides/workflows.md) for authoring, recovery templates and authenticated local API deployment.
+
 ## Install the terminal application
 
 The npm installation package is named `quifox` and provides the TUI. It requires Node.js 22.12 or newer; the installation artifact does not require Bun.

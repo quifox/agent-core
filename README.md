@@ -18,6 +18,8 @@ Mutable Context and Hook data give plugin authors room to experiment. Coordinati
 
 **[QuiFox TUI and Desktop](quifox/)** provide interactive applications built on the shared runtime. The [application guide](quifox/README.md) covers terminal installation, source startup and model configuration.
 
+The [workflow workbench](quifox/runtime/docs/guides/workflows.md) runs reusable TypeScript multi-Agent scripts, with static call graphs and live invocation states.
+
 ## Design demo
 
 A visual tour of lifecycle Hooks, sessions, interruption and recovery, plugin composition, tracing, Code Mode, and peer-Agent collaboration, followed by application examples.

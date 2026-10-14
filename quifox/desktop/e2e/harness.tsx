@@ -77,10 +77,10 @@ const fixture = {
     workflowState() {
         if (!workflowSession || !workflowDocument) throw new Error('Select a workflow first.')
         workflowSession.status = 'running'
-        const issues = workflowDocument.inspection.graph.nodes.filter(node => node.kind === 'issue')
-        workflowSession.events = issues.slice(0, 2).flatMap((node, index) => {
-            const birth = { type: 'node-dispatched', instance: { siteId: node.siteId!, ordinal: 0 }, phaseName: workflowDocument!.inspection.graph.phases.find(phase => phase.id === node.phase)!.label }
-            return (index ? [birth] : [birth, { ...birth, type: 'node-settled', outcome: 'ok' }]).map(data => ({ version: 1 as const, sessionId: workflowSession!.id, runId: 'workflow-run', sequence: ++sequence, timestamp: new Date().toISOString(), type: 'workflow', data }))
+        const nodes = workflowDocument.inspection.graph.nodes
+        workflowSession.events = nodes.slice(0, 3).flatMap((node, index) => {
+            const birth = { type: 'call-started', definitionId: node.id, callId: 'call:' + index, executionId: 'fixture', ...index ? { parentCallId: 'call:0' } : {} }
+            return (index === 1 ? [birth, { ...birth, type: 'call-settled', outcome: 'ok' }] : [birth]).map(data => ({ version: 1 as const, sessionId: workflowSession!.id, runId: 'workflow-run', sequence: ++sequence, timestamp: new Date().toISOString(), type: 'workflow', data }))
         })
         for (const event of workflowSession.events) receive({ kind: 'event', event })
     },

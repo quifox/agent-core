@@ -1,33 +1,23 @@
-import ts from 'typescript'
 import { createHash, randomUUID } from 'node:crypto'
 import { tmpdir } from 'node:os'
-import { analyzeWorkflowScript, projectControlFlow, createWorkflowProgram, collectSites, synthesizeAskSchemas, buildAskSpecs, lowerWorkflow, collectSitePhases, InMemoryJournalStore, WorkflowError, validate,
+import { analyzeWorkflowScript, createWorkflowProgram, collectSites, synthesizeAskSchemas, buildAskSpecs, lowerWorkflow, collectSitePhases, InMemoryJournalStore, WorkflowError, validate,
     type PersonaSpec, type AskMessage, type InstanceRef, type RunEvent, type SessionRef, type WorkflowDriver, type JournalStorePort } from '@quifox/workflow-engine'
 import { runWorkflowScript } from '@quifox/workflow-engine/runtime'
+import { workflowCalls } from './workflow-calls.js'
 
 export interface WorkflowGraph {
-    phases: { id: string; label: string; alongside?: string[] }[]
-    nodes: { id: string; label: string; kind: string; phase: string; siteId?: string }[]
+    nodes: { id: string; label: string; kind: string }[]
     edges: { from: string; to: string; kind: string }[]
-    phaseEdges: { from: string; to: string; kind: string }[]
 }
 export interface WorkflowInspection { ok: boolean; diagnostics: { line: number; column: number; message: string }[]; graph: WorkflowGraph }
+export interface WorkflowCallEvent {
+    type: 'call-started' | 'call-settled'
+    executionId: string; definitionId: string; callId: string; parentCallId?: string; outcome?: 'ok' | 'error'
+}
 
-/** Labels are normal JSDoc; execution and graph analysis consume the same normalized script. */
+/** Keep the original source and its locations for both checking and instrumentation. */
 export function workflowSource(script: string): string {
     if (Buffer.byteLength(script) > 200000) throw new Error('工作流脚本超过 200 KB。')
-    const source = ts.createSourceFile('workflow.ts', script, ts.ScriptTarget.ES2022, true)
-    const inserts: { position: number; text: string }[] = []
-    const visit = (node: ts.Node): void => {
-        if (ts.isFunctionDeclaration(node) || ts.isMethodDeclaration(node) || ts.isArrowFunction(node) || ts.isFunctionExpression(node)) {
-            const tag = ts.getJSDocTags(node).find(tag => tag.tagName.text === 'phase')
-            const label = typeof tag?.comment === 'string' ? tag.comment.trim() : undefined
-            if (label && node.body && ts.isBlock(node.body)) inserts.push({ position: node.body.getStart(source) + 1, text: `phase(${JSON.stringify(label)});` })
-        }
-        ts.forEachChild(node, visit)
-    }
-    visit(source)
-    for (const insert of inserts.sort((a, b) => b.position - a.position)) script = script.slice(0, insert.position) + insert.text + script.slice(insert.position)
     return script
 }
 
@@ -35,42 +25,19 @@ const inspections = new Map<string, WorkflowInspection>()
 export function inspectWorkflow(script: string): WorkflowInspection {
     const key = createHash('sha256').update(script).digest('hex'), cached = inspections.get(key)
     if (cached) return structuredClone(cached)
-    const result = analyzeWorkflowScript(workflowSource(script))
-    const flow = result.core ? projectControlFlow(result.core, { suspendAtAwait: true }) : result.flow, steps = new Map(result.causality?.steps.map(step => [step.id, step]) ?? [])
-    const phases = (flow?.phases ?? []).map(phase => ({ id: phase.id, label: phase.name ?? '主流程', ...(phase.alongside ? { alongside: phase.alongside } : {}) }))
-    for (const node of flow?.nodes ?? []) if (!phases.some(phase => phase.id === node.phase)) phases.push({ id: node.phase, label: '主流程' })
-    let edges: WorkflowGraph['edges'] = flow?.edges ?? []
-    for (const phase of phases) {
-        const nodes = (flow?.nodes ?? []).filter(node => node.phase === phase.id && node.site)
-        if (nodes.length < 2 || nodes.some(node => steps.get(node.site!)?.certainty !== 'always')) continue
-        const regions = new Set(nodes.map(node => steps.get(node.site!)?.region))
-        if (regions.size !== 1) continue
-        const dependencies = (result.causality?.edges ?? []).flatMap(edge => {
-            const from = nodes.find(node => node.site === edge.from), to = nodes.find(node => node.site === edge.to)
-            return from && to ? [{ from: from.id, to: to.id, kind: 'next' }] : []
-        })
-        const roots = nodes.filter(node => !dependencies.some(edge => edge.to === node.id)), leaves = nodes.filter(node => !dependencies.some(edge => edge.from === node.id))
-        if (roots.length < 2 || !leaves.length) continue
-        const ids = new Set(nodes.map(node => node.id))
-        const incoming = edges.filter(edge => !ids.has(edge.from) && ids.has(edge.to)), outgoing = edges.filter(edge => ids.has(edge.from) && !ids.has(edge.to))
-        edges = [...edges.filter(edge => !ids.has(edge.from) && !ids.has(edge.to)), ...dependencies,
-            ...incoming.flatMap(edge => roots.map(node => ({ from: edge.from, to: node.id, kind: 'fork' }))),
-            ...outgoing.flatMap(edge => leaves.map(node => ({ from: node.id, to: edge.to, kind: leaves.length > 1 ? 'join' : edge.kind })))]
-    }
-    const inspection = { ok: result.ok, diagnostics: result.diagnostics,
-        graph: { phases,
-            nodes: (flow?.nodes ?? []).map(node => ({ id: node.id, kind: node.kind, phase: node.phase, label: node.site ? steps.get(node.site)?.label ?? '操作' : flow?.phases?.find(phase => phase.id === node.phase)?.name ?? '阶段', ...(node.site ? { siteId: node.site } : {}) })),
-            edges, phaseEdges: flow?.phaseEdges ?? [] } }
+    const source = workflowSource(script), result = analyzeWorkflowScript(source), calls = workflowCalls(createWorkflowProgram(source))
+    const diagnostics = [...result.diagnostics, ...calls.diagnostics]
+    const inspection = { ok: result.ok && !calls.diagnostics.length, diagnostics, graph: calls.graph }
     inspections.set(key, inspection)
     if (inspections.size > 32) inspections.delete(inspections.keys().next().value!)
     return structuredClone(inspection)
 }
 
 export interface WorkflowRunOptions {
-    runId?: string; journal?: JournalStorePort
+    runId?: string; executionId?: string; journal?: JournalStorePort
     script: string; args: Record<string, unknown>; cwd?: string; signal?: AbortSignal
     ask(persona: PersonaSpec, input: AskMessage, signal: AbortSignal, sessionId: string, inputId: string): Promise<unknown>
-    emit?(event: RunEvent): void
+    emit?(event: (RunEvent & { executionId: string }) | WorkflowCallEvent): void
     error?(cause: unknown): void
     world?(operation: string, args: unknown[]): Promise<unknown>
     childSpawn?: { argsPrefix: readonly string[] }
@@ -81,15 +48,17 @@ export async function runWorkflow(options: WorkflowRunOptions): Promise<unknown>
     if (!analysis.ok) throw new Error(analysis.diagnostics.map(diagnostic => `${diagnostic.line}:${diagnostic.column} ${diagnostic.message}`).join('\n'))
     const program = createWorkflowProgram(source), table = collectSites(program), schemas = synthesizeAskSchemas(program, table)
     if (schemas.diagnostics.length) throw new Error(schemas.diagnostics.map(value => value.message).join('\n'))
-    const lowered = lowerWorkflow(program, table)
+    const lowered = lowerWorkflow(program, table, workflowCalls(program).bodies)
     const sessions = new Map<string, PersonaSpec>(), controllers = new Map<string, AbortController>(), pending = new Set<Promise<void>>()
     const verdicts = new Map<string, Parameters<WorkflowDriver['respondToSubmit']>[1]>()
     const journal = options.journal ?? new InMemoryJournalStore(), runId = options.runId ?? randomUUID()
+    const executionId = options.executionId ?? randomUUID()
     const instancePhases = new Map<string, string>()
     for (const stored of journal.listEvents(runId, { types: 'all', reportItems: 'all' })) {
         if ('instance' in stored.event && 'phaseName' in stored.event && stored.event.phaseName) instancePhases.set(stored.event.instance.siteId + '@' + stored.event.instance.ordinal, stored.event.phaseName)
     }
-    const result = await runWorkflowScript({ lowered: lowered.code, scriptText: source, scriptHash: createHash('sha256').update(source).digest('hex'), args: options.args, cwd: options.cwd ?? tmpdir(), runId, caps: { maxConcurrency: 8 },
+    const result = await runWorkflowScript({ lowered: `return __host.node("entry", async () => {\n${lowered.code}\n});`, scriptText: source, scriptHash: createHash('sha256').update(source).digest('hex'), args: options.args, cwd: options.cwd ?? tmpdir(), runId, caps: { maxConcurrency: 8 },
+        onCall: event => { const { kind: _kind, ...call } = event; options.emit?.({ ...call, executionId }) },
         askSpecs: buildAskSpecs(table, schemas.schemas), sitePhases: collectSitePhases(analyzeWorkflowScript(source).core!), validate: (schema, value) => validate(schema as Parameters<typeof validate>[0], value),
         ...(options.signal ? { signal: options.signal } : {}), ...(options.childSpawn ? { childSpawn: options.childSpawn } : {}),
         makeDriver: sink => {
@@ -101,7 +70,7 @@ export async function runWorkflow(options: WorkflowRunOptions): Promise<unknown>
                         const phaseName = instancePhases.get(key)
                         if (event.type === 'node-settled' && phaseName) event = { ...event, phaseName }
                     }
-                    options.emit?.(event)
+                    options.emit?.({ ...event, executionId })
                 },
                 createActorSession: async (actor, persona): Promise<SessionRef> => { const id = runId + ':' + actor.siteId + ':' + actor.ordinal; sessions.set(id, persona); return { id } },
                 startAsk: (session, instance, message) => {

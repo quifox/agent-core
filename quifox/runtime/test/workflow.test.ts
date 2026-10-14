@@ -9,13 +9,72 @@ import { tmpdir } from 'node:os'
 import { workflowJournal } from '../src/workflow-journal.js'
 import { request as httpRequest } from 'node:http'
 
-it('does not draw a path bypassing an awaited phase and retains the early-return branch', () => {
+it('lowers shorthand input properties and preserves locally shadowed input names', async () => {
+    expect(await runWorkflow({ script: 'return { args };', args: { question: 'input' }, ask: async () => 'unused' })).toEqual({ args: { question: 'input' } })
+    expect(await runWorkflow({ script: 'const args = "local"; return { args };', args: { question: 'input' }, ask: async () => 'unused' })).toEqual({ args: 'local' })
+})
+
+it('shows annotated function calls rather than inventing an execution-order graph', () => {
+    const inspection = inspectWorkflow('/** @node Route */\nasync function route(){ if(args.question) return await search(); return "empty"; }\n/** @node Search */\nasync function search(){ return await agent("Search").ask("query"); }\nreturn await route();')
+    expect(inspection.ok).toBe(true)
+    const route = inspection.graph.nodes.find(node => node.label === 'Route')!
+    const search = inspection.graph.nodes.find(node => node.label === 'Search')!
+    expect(route).toBeDefined()
+    expect(search).toBeDefined()
+    expect(inspection.graph.edges).toEqual(expect.arrayContaining([
+        expect.objectContaining({ from: 'entry', to: route.id }),
+        expect.objectContaining({ from: route.id, to: search.id, kind: 'conditional' })
+    ]))
+    expect(inspection.graph.edges.some(edge => edge.from === search.id && edge.to === route.id)).toBe(false)
+})
+
+it('keeps conditional calls separate from execution order and includes synchronous nodes', () => {
     const script = '/** @phase First */\nasync function first(){ return await agent("First").ask("question"); }\n/** @phase Second */\nasync function second(){ return await agent("Second").ask("question"); }\nconst value = await first(); if(value === "skip") return "skipped"; return await second();'
-    const graph = inspectWorkflow(script).graph, first = graph.phases.find(phase => phase.label === 'First')!
+    const graph = inspectWorkflow(script).graph, first = graph.nodes.find(node => node.label === 'First')!
     const starts = graph.edges.filter(edge => edge.from === 'entry')
-    expect(starts).not.toHaveLength(0)
-    expect(starts.every(edge => graph.nodes.find(node => node.id === edge.to)?.phase === first.id)).toBe(true)
-    expect(graph.edges.some(edge => edge.to === 'sink' && edge.kind === 'jump')).toBe(true)
+    expect(starts).toHaveLength(2)
+    expect(starts.some(edge => edge.to === first.id)).toBe(true)
+    expect(graph.edges.some(edge => edge.from === first.id)).toBe(false)
+})
+
+it('tracks nested parallel and repeated calls with independent parent instances', async () => {
+    const script = '/** @node Parent */\nasync function parent(){return await Promise.all([child("a"), child("b")]);}\n/** @node Child */\nasync function child(value:string){return await agent(value).ask(value);}\nreturn await parent();'
+    const events: unknown[] = []
+    expect(await runWorkflow({ script, args: {}, emit: event => { events.push(event) }, ask: async (_persona, message) => message.instructions })).toEqual(['a', 'b'])
+    const calls = events.filter((event): event is {type:string; callId:string; parentCallId?:string; definitionId:string} => typeof event === 'object' && event !== null && 'type' in event && event.type === 'call-started')
+    const graph = inspectWorkflow(script).graph, parent = graph.nodes.find(node => node.label === 'Parent')!, child = graph.nodes.find(node => node.label === 'Child')!
+    const children = calls.filter(call => call.definitionId === child.id), parentCall = calls.find(call => call.definitionId === parent.id)!
+    expect(children).toHaveLength(2)
+    expect(new Set(children.map(call => call.callId)).size).toBe(2)
+    expect(children.every(call => call.parentCallId === parentCall.callId)).toBe(true)
+    expect(events.filter(event => typeof event === 'object' && event !== null && 'type' in event && event.type === 'call-settled')).toHaveLength(4)
+})
+
+it('preserves each parallel parent after await and traces its synchronous child', async () => {
+    const script = '/** @node Parent */\nasync function parent(name:string){const value=await agent(name).ask(name);return leaf(value);}\n/** @node Leaf */\nfunction leaf(value:string){return value.toUpperCase();}\nreturn await Promise.all(["a","b"].map(parent));'
+    const events: { type?: string; callId?: string; parentCallId?: string; definitionId?: string }[] = []
+    expect(await runWorkflow({ script, args: {}, emit: event => { events.push(event) }, ask: async (_persona, message) => message.instructions })).toEqual(['A', 'B'])
+    const graph = inspectWorkflow(script).graph, parent = graph.nodes.find(node => node.label === 'Parent')!, leaf = graph.nodes.find(node => node.label === 'Leaf')!
+    expect(graph.edges).toContainEqual({ from: 'entry', to: parent.id, kind: 'callback' })
+    const parents = events.filter(event => event.type === 'call-started' && event.definitionId === parent.id)
+    const leaves = events.filter(event => event.type === 'call-started' && event.definitionId === leaf.id)
+    expect(new Set(leaves.map(event => event.parentCallId))).toEqual(new Set(parents.map(event => event.callId)))
+})
+
+it('keeps method receivers, arguments and synchronous promise identity intact', async () => {
+    const script = '/** @node Identity */\nfunction identity(p:Promise<string>){return p;}\nconst object={value:4,\n/** @node Value */\nread(delta:number){return this.value+delta+arguments[0];}};\nconst p=Promise.resolve("same"); if(identity(p)!==p) throw new Error("identity changed"); return {value:object.read(3), result:await p};'
+    expect(await runWorkflow({ script, args: {}, ask: async () => 'unused' })).toEqual({ value: 10, result: 'same' })
+    expect(inspectWorkflow('/** @node */\nfunction named(){return "done";} return named();').ok).toBe(true)
+    expect(inspectWorkflow('function unlabelled(){return "done";} return unlabelled();').ok).toBe(false)
+})
+
+it('does not choose a static target for dynamic dispatch and observes the actual target', async () => {
+    const script = '/** @node A */\nfunction a(){return "a";}\n/** @node B */\nfunction b(){return "b";}\nconst targets=[a,b]; return targets[Number(args.index)]!();'
+    const graph = inspectWorkflow(script).graph
+    expect(graph.edges).toEqual([])
+    const calls: string[] = []
+    expect(await runWorkflow({ script, args: { index: 1 }, ask: async () => 'unused', emit: event => { if (event.type === 'call-started') calls.push(event.definitionId) } })).toBe('b')
+    expect(calls).toEqual(['entry', graph.nodes.find(node => node.label === 'B')!.id])
 })
 
 it('derives a method-labelled branch graph and runs only the selected path with the supplied input', async () => {
@@ -30,7 +89,7 @@ async function answer(intent: string) { return await agent("回答").ask<string>
 return await answer(await identify());`
     const inspected = inspectWorkflow(script)
     expect(inspected.ok).toBe(true)
-    expect(inspected.graph.phases.map(phase => phase.label)).toEqual(expect.arrayContaining(['意图识别', '回答']))
+    expect(inspected.graph.nodes.map(node => node.label)).toEqual(expect.arrayContaining(['意图识别', '回答']))
     const calls: string[] = []
     const value = await runWorkflow({ script, args: { question: 'known' }, ask: async (_persona, input) => { calls.push(input.instructions); return 'answer:' + input.instructions } })
     expect(value).toBe('answer:rule')

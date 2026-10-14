@@ -136,7 +136,7 @@ export function lowerWorkflowScript(scriptText: string): LowerResult {
  * 绝不按名字/形状重新识别——那会制造第二份真相。`log` 不入站点表，按 checker 的
  * 签名解析（解析进 facade .d.ts，与 sites.ts 同一机制）识别，属于身份判定而非名字启发。
  */
-export function lowerWorkflow(workflow: WorkflowProgram, table: SiteTable): LoweredWorkflow {
+export function lowerWorkflow(workflow: WorkflowProgram, table: SiteTable, nodes?: ReadonlyMap<ts.Node, { id: string; async: boolean }>): LoweredWorkflow {
   const checker = workflow.program.getTypeChecker();
   const siteMap = buildSiteMap(table);
   // 已补全留白的函数体（改写后的节点），transform 结束后打印成 holeBodies。
@@ -151,12 +151,26 @@ export function lowerWorkflow(workflow: WorkflowProgram, table: SiteTable): Lowe
     const siteArg = (id: string): ts.Expression => factory.createStringLiteral(id);
 
     const visit: ts.Visitor = (node) => {
+      const definition = nodes?.get(node);
+      if (definition) {
+        const body = ts.visitEachChild(node, visit, context) as ts.ConciseBody;
+        const callback = factory.createArrowFunction(
+          definition.async ? [factory.createModifier(ts.SyntaxKind.AsyncKeyword)] : undefined,
+          undefined, [], undefined, factory.createToken(ts.SyntaxKind.EqualsGreaterThanToken), body,
+        );
+        const call = factory.createCallExpression(hostMember("node"), undefined, [siteArg(definition.id), callback]);
+        return ts.isBlock(node) ? factory.createBlock([factory.createReturnStatement(call)], true) : call;
+      }
       // `args` 是 facade 里唯一一个**值**而不是可调用物，所以它是唯一走标识符级改写的
       // 符号：读它不是一个等待点，没有站点、不进因果图。判定按 checker 解析结果（与站点
       // 身份同一机制），所以脚本自己声明的局部 `args` 解析到脚本文件的符号，原样保留。
       //
       // 刻意**不**改用「在包装函数体里注入 `const args = ...`」：用户脚本里再声明一个
       // `args` 会变成重复声明的运行期 SyntaxError，而编译期完全看不出来。
+      if (ts.isShorthandPropertyAssignment(node) && node.name.text === "args" &&
+          isFacadeDeclared(checker.getShorthandAssignmentValueSymbol(node))) {
+        return factory.createPropertyAssignment(node.name, hostMember("args"));
+      }
       if (ts.isIdentifier(node) && node.text === "args" && isFacadeArgsRead(node, checker)) {
         return hostMember("args");
       }

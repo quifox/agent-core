@@ -21,7 +21,7 @@ test('workflow library shows analyzed branches and reuses multi-turn chat at wid
     await page.mouse.move(canvas!.x + 12, canvas!.y + 30); await page.mouse.down(); await page.mouse.move(canvas!.x + 70, canvas!.y + 70); await page.mouse.up()
     await expect.poll(() => viewport.getAttribute('style')).not.toBe(beforePan)
     await page.getByRole('button', { name: '适合工作流视图' }).click()
-    await page.getByRole('button', { name: '展开步骤' }).click()
+    await expect(page.getByRole('button', { name: '调用实例' })).toBeDisabled()
     await expect(page.locator('.react-flow__node')).not.toHaveCount(0)
     expect(await page.locator('.react-flow__edge-path').evaluateAll(paths => paths.every(path => !/NaN|undefined/.test(path.getAttribute('d') ?? '')))).toBe(true)
     await page.getByRole('textbox', { name: '给 quifox 的消息' }).fill('一个通用的知识问题')
@@ -45,8 +45,46 @@ test('actual node facts highlight completed and active phases while untouched pa
     await expect(page.locator('.workflow-state-running')).not.toHaveCount(0)
     await expect(page.locator('.workflow-state-completed')).not.toHaveCount(0)
     await expect(page.locator('.workflow-state-idle')).not.toHaveCount(0)
-    await expect(page.locator('.react-flow__edge.animated')).not.toHaveCount(0)
+    await expect(page.locator('.workflow-edge-observed')).not.toHaveCount(0)
+    expect(await page.locator('.workflow-edge-observed .react-flow__edge-path').evaluateAll(paths => paths.every(path => getComputedStyle(path).strokeDasharray === 'none'))).toBe(true)
+    await page.getByRole('button', { name: '调用实例' }).click()
+    await expect(page.locator('.react-flow__node')).toHaveCount(3)
+    await page.locator('.react-flow__node').first().getByRole('button').focus()
+    await page.keyboard.press('Enter')
+    await expect(page.getByLabel('节点调用详情')).toBeVisible()
+    await page.getByRole('button', { name: '关闭节点详情' }).click()
+    await page.getByRole('button', { name: '调用关系' }).click()
     await page.screenshot({ path: '../../artifacts/ui/workflow-highlight.png' })
+})
+
+test('shared methods and recursive relations keep nodes and routed paths separate', async ({ page }) => {
+    const branching = '/** @node Root */\nfunction root(){return first()+second();}\n/** @node First */\nfunction first(){return shared(1);}\n/** @node Second */\nfunction second(){return shared(2);}\n/** @node Shared */\nfunction shared(depth:number):string{if(depth>0)return shared(depth-1);return "done";}\nreturn root();'
+    const document = { name: 'branching', script: branching, inspection: inspectWorkflow(branching) }
+    expect(document.inspection.ok).toBe(true)
+    await page.goto('/e2e/harness.html')
+    await page.evaluate(document => window.uiFixture.workflow(document), document)
+    await page.getByRole('button', { name: '工作流', exact: true }).click()
+    await page.getByRole('navigation', { name: '已保存工作流' }).getByRole('button', { name: 'branching' }).click()
+    await expect(page.locator('.react-flow__node')).toHaveCount(5)
+    const overlaps = await page.locator('.react-flow').evaluate(canvas => {
+        const rectangles = [...canvas.querySelectorAll('.react-flow__node')].map(node => node.getBoundingClientRect())
+        return rectangles.some((a, index) => rectangles.slice(index + 1).some(b => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top))
+    })
+    expect(overlaps).toBe(false)
+    const crossings = await page.locator('.react-flow').evaluate(canvas => {
+        const rectangles = [...canvas.querySelectorAll('.react-flow__node')].map(node => ({ id: node.getAttribute('data-id'), rect: node.getBoundingClientRect() }))
+        return [...canvas.querySelectorAll<SVGPathElement>('.react-flow__edge-path')].flatMap(path => {
+            const matrix = path.getScreenCTM()!, length = path.getTotalLength()
+            for (let distance = 8; distance < length - 8; distance += 8) {
+                const point = path.getPointAtLength(distance), position = new DOMPoint(point.x, point.y).matrixTransform(matrix)
+                const crossed = rectangles.find(({ rect }) => position.x > rect.left + 3 && position.x < rect.right - 3 && position.y > rect.top + 3 && position.y < rect.bottom - 3)
+                if (crossed) return [{ edge: path.id, node: crossed.id, route: path.getAttribute('d') }]
+            }
+            return []
+        })
+    })
+    expect(crossings).toEqual([])
+    await page.screenshot({ path: '../../artifacts/ui/workflow-branches.png' })
 })
 
 test('closing API management preserves the service and provides a real stop action after navigating away', async ({ page }) => {

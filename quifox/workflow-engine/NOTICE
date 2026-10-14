@@ -12,3 +12,6 @@ rewrite third-party algorithms.
 QuiFox narrows its author-facing facade to Agent asks, arguments, phase labels and logs.
 An opt-in control-view projection follows completed awaits rather than retaining
 the asynchronous spawner cursor as an apparent bypass path. Execution is unchanged.
+QuiFox additionally instruments annotated function bodies and traces their actual
+parent/child invocations using asynchronous call contexts. Its default UI graph is
+a TypeScript symbol-resolved call graph, separate from upstream control-flow projections.
