@@ -1,22 +1,22 @@
-# QuiFox
+# agent-core
 
 [English](README.md) | 简体中文
 
-> **实验性研究项目。** 用小型执行内核与显式插件探索不同的 Agent 组合。API 与组合契约仍在演进；项目尚未建立生产就绪的保证。
+## <img src="quifox/desktop/src/assets/fox.svg" alt="" width="32" height="32"> QuiFox：基于 agent-core 的 Harness
 
-<p align="center">
-  <strong>通过开放的钩子系统，自由组合你的 Agent 行为。</strong>
-</p>
+如果你对 agent-core 感兴趣，推荐先体验 **[QuiFox](quifox/)**，了解框架与插件如何组成一个实际可用的 Agent 应用。
 
-## Agent 框架
+QuiFox 是基于 agent-core 构建的 Harness，提供终端（TUI）和桌面（GUI）界面，将模型连接、会话、工具执行、授权确认、Skills、子智能体和运行轨迹整合到同一个交互环境中。
 
-QuiFox 提供默认执行循环与覆盖生命周期的 Hook。插件提供模型生成、会话、提示词、工具、中断、恢复、压缩、事件、子任务与团队能力。
+**[查看 QuiFox 使用指南 →](quifox/README.zh-CN.md)**
 
-可变 Context 与 Hook 工作数据给插件作者更多探索空间；插件之间的协作依赖共同能力、顺序与生命周期契约。
+## Agent Core
 
-## QuiFox 应用
+agent-core 是一个以最小执行核心和显式插件组合为基础的 Agent 框架。
 
-**[QuiFox TUI 与桌面端](quifox/)** 基于共享 runtime 提供可交互的应用。[中文应用指南](quifox/README.zh-CN.md) 统一说明终端安装、源码启动与模型配置。
+Core 提供默认执行循环与覆盖生命周期的 Hook。模型生成、会话、提示词、工具、中断、恢复、压缩、事件和协作能力由插件提供，开发者可以按需要组合自己的 Agent 行为。
+
+> Agent Core 当前处于实验阶段，API 与插件组合契约仍在演进。
 
 [工作流工作台](quifox/runtime/docs/guides/workflows.zh-CN.md) 支持可复用的 TypeScript 多 Agent 脚本，展示静态调用图与运行时调用状态。
 
@@ -24,9 +24,7 @@ QuiFox 提供默认执行循环与覆盖生命周期的 Hook。插件提供模�
 
 从生命周期 Hook 出发，展示会话、中断与恢复、插件组合、运行追踪、Code Mode 与平级 Agent 协作，并通过应用示例说明这些能力如何组合使用。
 
-[![QuiFox 生命周期 Hook 与插件组合](docs/media/agent-core-demo.png)](docs/media/agent-core-demo.mp4)
-
-[观看 QuiFox Core 与插件能力展示](docs/media/agent-core-demo.mp4)。
+[观看 Agent Core 与插件能力展示](docs/media/agent-core-demo.mp4)。
 
 ## 探索插件组合
 

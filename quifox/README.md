@@ -1,13 +1,10 @@
-# QuiFox applications
+# QuiFox
 
 English | [简体中文](README.zh-CN.md)
 
 <img src="desktop/src/assets/fox.svg" alt="QuiFox fox" width="64" height="64">
 
-QuiFox is the terminal and desktop application layer of this monorepo. It composes the [Core and framework plugins](../README.md) into interactive Agents with shared conversations, model connections, tool approvals, Skills, Memory, child tasks and execution traces.
-
-> [!NOTE]
-> QuiFox is an experimental research project. APIs and application behavior are evolving.
+QuiFox is a Harness built on [agent-core](../README.md), with terminal (TUI) and desktop (GUI) interfaces. It composes Core and framework plugins into interactive Agents with shared conversations, model connections, tool approvals, Skills, Memory, child tasks and execution traces.
 
 ## Components
 
