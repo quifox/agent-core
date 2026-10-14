@@ -8,9 +8,15 @@
   <strong>通过开放的钩子系统，自由组合你的 Agent 行为。</strong>
 </p>
 
+## Agent 框架
+
 QuiFox 提供默认执行循环与覆盖生命周期的 Hook。插件提供模型生成、会话、提示词、工具、中断、恢复、压缩、事件、子任务与团队能力。
 
 可变 Context 与 Hook 工作数据给插件作者更多探索空间；插件之间的协作依赖共同能力、顺序与生命周期契约。
+
+## QuiFox 应用
+
+[QuiFox TUI 与桌面端](quifox/README.zh-CN.md) 基于共享 runtime 提供可交互的应用。应用 README 统一说明终端安装、源码启动与模型配置。
 
 ## 设计演示
 

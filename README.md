@@ -8,9 +8,15 @@ English | [简体中文](README.zh-CN.md)
   <strong>An open hook system for composing your own agent behavior.</strong>
 </p>
 
+## Agent framework
+
 QuiFox provides a default execution loop and Hooks across its lifecycle. Plugins add model generation, sessions, prompts, Tools, interruption, recovery, compaction, events, child tasks, and teams.
 
 Mutable Context and Hook data give plugin authors room to experiment. Coordination between plugins depends on their shared capabilities, ordering, and lifecycle contracts.
+
+## QuiFox applications
+
+[QuiFox TUI and Desktop](quifox/README.md) provide interactive applications built on the shared runtime. Their application README covers terminal installation, source startup and model configuration.
 
 ## Design demo
 

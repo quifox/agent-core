@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Box, Text, measureElement, useApp, useInput, useStdout, type DOMElement } from 'ink'
+import { useShikiHighlighter } from '@assistant-ui/react-ink-markdown'
+import { basename } from 'node:path'
 import { toolSummary, agentRecipients, inputSuggestions, type ObservabilityView, type InputRoutingReceipt, type ResourceView, type RuntimeCommand, type RuntimeEvent, type RuntimeSnapshot, type SessionView } from '@quifox/shared-runtime'
-import { stripVTControlCharacters } from 'node:util'
-import { toolResultText, traceText } from './trace-text.js'
+import { traceText } from './trace-text.js'
+import { TerminalMarkdown, TerminalMessage, safeText } from './transcript.js'
 
 export interface TerminalRuntime { command(command: RuntimeCommand): Promise<unknown>; subscribe(listener: (event: RuntimeEvent) => void): () => void; close(): Promise<void> }
 
 export function Fox() {
-    return <Box flexDirection="column"><Text color="#F0CF58">{' /\\   /\\'}</Text><Text color="white">{'(  • . • )'}</Text><Text color="#18A4DA">{' \\  ▼  /'}</Text><Text color="#18A4DA">{'  /_   _\\~~'}</Text></Box>
+    return <Box flexDirection="column" width={9}><Text color="#F0CF58">{' /\\__/\\'}</Text><Text color="#18A4DA">{'( '}<Text color="white">{'•  •'}</Text>{' )'}</Text><Text color="#18A4DA">{' \\__▼_/'}</Text></Box>
 }
 
 /** Terminal controls call the shared Host; rendered messages and tasks are projections only. */
@@ -17,16 +19,22 @@ interface Editor { label: string; secret?: boolean; save(value: string): Promise
 const builtinCommands = [
     ['/new', '新的主会话'], ['/resume', '选择历史会话'], ['/tasks', '子任务与父会话'], ['/open', '按会话 ID 打开'], ['/spawn', '创建待机子 Agent'], ['/config', '可视配置'], ['/model', '切换当前模型'], ['/effort', '思考强度'],
     ['/mcp', '连接与配置 MCP'], ['/agents', 'Agent 定义'], ['/skills', '可用技能'], ['/memory', '运行时记忆'], ['/trace', '操作详情'], ['/observability', '运行指标与最近轨迹'],
-    ['/continue', '恢复执行'], ['/stop', '停止'], ['/approve', '批准工具'], ['/deny', '拒绝工具'], ['/models', '刷新模型资料'], ['/help', '帮助']
+    ['/continue', '恢复执行'], ['/stop', '停止'], ['/models', '刷新模型资料'], ['/help', '帮助']
 ] as const
-const safe = (value: string): string => stripVTControlCharacters(value).replace(/\p{Cc}/gu, value => ['\n', '\t'].includes(value) ? value : '')
+const safe = safeText
+const statuses: Record<string, string> = { idle: '空闲', running: '运行中', stopped: '已暂停', error: '需要处理', ready: '连接中' }
 
 export function TerminalApp({ runtime, initialSessionId, showResume = false }: { runtime: TerminalRuntime; initialSessionId?: string; showResume?: boolean }) {
     const { exit } = useApp(), { stdout } = useStdout()
+    const highlighter = useShikiHighlighter()
     const terminal = stdout as NodeJS.WritableStream & { columns?: number; rows?: number }
     const [snapshot, setSnapshot] = useState<RuntimeSnapshot>()
     const snapshotRef = useRef<RuntimeSnapshot | undefined>(undefined)
     const [view, setView] = useState<SessionView>()
+    const [approvalChoice, setApprovalChoice] = useState(0)
+    const approvalChoiceRef = useRef(0)
+    const approvalIdentity = useRef<string | undefined>(undefined)
+    const approval = view?.approvals[0]
     const [suggestionResources, setSuggestionResources] = useState<ResourceView>()
     const selected = useRef<string | undefined>(initialSessionId), starting = useRef<Promise<string> | undefined>(undefined)
     const [draft, setDraft] = useState(''), [cursor, setCursor] = useState(0)
@@ -63,6 +71,11 @@ export function TerminalApp({ runtime, initialSessionId, showResume = false }: {
         const id = selected.current
         const current = id ? await runtime.command({ type: 'snapshot', sessionId: id, messageLimit: 60, eventLimit: 300, traceOnly: true }) as SessionView : undefined
         if (ticket === revision.current && id === selected.current) {
+            const nextApproval = current?.approvals[0]?.id
+            if (approvalIdentity.current !== nextApproval) {
+                approvalIdentity.current = nextApproval
+                approvalChoiceRef.current = 0; setApprovalChoice(0)
+            }
             snapshotRef.current = next; setSnapshot(next); setView(current)
             if ((current?.eventSequence ?? 0) >= liveSequence.current) { liveRef.current = current?.liveText ?? liveText(current?.events ?? []); setLive(liveRef.current) }
             if (showResume && !resumeShown.current) { resumeShown.current = true; setPicker({ title: '恢复主会话', choices: next.sessions.filter(item => !item.parentId).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).map(item => ({ label: `${item.id.slice(0, 8)} · ${item.title}${item.unavailable ? ' · 只读' : ''}`, detail: item.workspace, action: async () => { beginSelection(item.id); await refresh() } })) }) }
@@ -115,9 +128,9 @@ export function TerminalApp({ runtime, initialSessionId, showResume = false }: {
         const next = { label, save, secret }; editorRef.current = next; setPicker(undefined); setEditor(next); edit(value, [...value].length)
     }
     const modelWizard = (): void => {
-        const fields = ['id', 'provider', 'model', 'baseUrl', 'contextWindow', 'maxOutputTokens', 'apiKey'] as const
-        const labels = ['配置 ID', 'Provider', '模型名称', 'Base URL', 'context 容量（已知模型可留空）', '最大输出 Tokens', 'API Key（可留空）']
-        const values: Record<string, unknown> = {}
+        const fields = ['id', 'model', 'baseUrl', 'contextWindow', 'maxOutputTokens', 'apiKey'] as const
+        const labels = ['配置名称', '模型名称', 'Base URL', '上下文容量（已知模型可留空）', '最大输出 Tokens', 'API Key（可留空）']
+        const values: Record<string, unknown> = { provider: 'custom-chat' }
         const step = (index: number): void => field(`添加模型 · ${labels[index]}`, fields[index] === 'maxOutputTokens' ? '16384' : '', async value => {
             const name = fields[index]!
             if (!value.trim() && !['apiKey', 'contextWindow'].includes(name)) throw new Error('请填写此字段。')
@@ -125,7 +138,10 @@ export function TerminalApp({ runtime, initialSessionId, showResume = false }: {
             if (index < fields.length - 1) step(index + 1)
             else await invoke({ type: 'config', patch: { models: [...snapshot?.config.models.filter(model => model.id !== values.id).map(model => ({ id: model.id })) ?? [], values] } })
         }, fields[index] === 'apiKey')
-        step(0)
+        menu('连接类型', [
+            { label: 'DeepSeek', action: async () => { values.provider = 'deepseek'; step(0) } },
+            { label: '自定义 Chat', action: async () => { values.provider = 'custom-chat'; step(0) } }
+        ])
     }
     const mcpWizard = (): void => {
         const server: Record<string, unknown> = {}
@@ -150,7 +166,8 @@ export function TerminalApp({ runtime, initialSessionId, showResume = false }: {
         })
     }
     const configure = (): void => menu('配置', [
-        { label: `工具授权：全局${snapshot?.config.approval === 'allow' ? '直接' : '询问'} · 当前${view?.approvalMode === 'deny' ? '拒绝' : view?.approvalMode === 'allow' ? '直接' : '询问'}`, action: async () => { await invoke({ type: 'config', patch: { approval: snapshot?.config.approval === 'allow' ? 'ask' : 'allow' } }); setPicker(undefined) } },
+        { label: '全局工具权限', action: async () => permissionMenu('global') },
+        ...(view ? [{ label: '当前会话工具权限', action: async () => permissionMenu('session') }] : []),
         { label: `新消息：${snapshot?.config.preferences.inputMode === 'steer' ? '完整边界引导' : '当前轮后排队'}`, action: async () => { await invoke({ type: 'config', patch: { preferences: { inputMode: snapshot?.config.preferences.inputMode === 'steer' ? 'queue' : 'steer' } } }); setPicker(undefined) } },
         { label: '模型连接', action: async () => modelMenu() }, { label: 'MCP 服务', action: async () => mcpMenu() },
         { label: '默认模型名称', action: async () => field('默认 Chat 模型', snapshot?.config.model.model ?? '', async model => invoke({ type: 'config', patch: { model: { model } } })) },
@@ -159,6 +176,14 @@ export function TerminalApp({ runtime, initialSessionId, showResume = false }: {
         { label: `Memory：${snapshot?.config.memory.enabled ? '开启' : '关闭'}`, action: async () => { await invoke({ type: 'config', patch: { memory: { enabled: !snapshot?.config.memory.enabled } } }); setPicker(undefined) } },
         { label: '配置来源', action: async () => { setPicker(undefined); setPanel((view?.configSources ?? []).join('\n')) } }
     ])
+    const permissionMenu = (scope: 'global' | 'session'): void => {
+        if (scope === 'session' && view?.approvalMode === 'deny') { setPicker(undefined); setPanel('当前子智能体的角色限制不允许扩大工具权限。'); return }
+        const active = scope === 'global' ? snapshot?.config.approval : view?.approvalMode
+        menu(scope === 'global' ? '全局工具权限' : '当前会话工具权限', (['ask', 'allow'] as const).map(mode => ({
+            label: `${active === mode ? '✓ ' : ''}${mode === 'ask' ? '逐次询问' : '无需确认'}`,
+            action: async () => { await invoke(scope === 'global' ? { type: 'config', patch: { approval: mode } } : { type: 'session-config', sessionId: view!.id, approvalMode: mode }); setPicker(undefined) }
+        })))
+    }
     const modelMenu = (): void => menu('当前会话模型', [
         ...[{ id: 'default', model: view?.defaultModel?.model ?? snapshot?.config.model.model ?? '默认' }, ...view?.models ?? snapshot?.config.models ?? []].map(model => ({
             label: `${view?.modelId === model.id ? '✓ ' : ''}${model.id} · ${model.model}`, action: async () => { if (view) await invoke({ type: 'session-config', sessionId: view.id, modelId: model.id, reasoningEffort: null }); setPicker(undefined) } })),
@@ -221,11 +246,6 @@ export function TerminalApp({ runtime, initialSessionId, showResume = false }: {
                 }
                 case '/continue': if (view) await invoke({ type: 'resume', sessionId: view.id, mode: 'replan' }); return
                 case '/stop': if (view) await invoke({ type: 'stop', sessionId: view.id }); return
-                case '/approve': case '/deny': {
-                    const approval = view?.approvals[0]
-                    if (!view || !approval) throw new Error('当前没有待审批操作。')
-                    await invoke({ type: 'approve', sessionId: view.id, approvalId: approval.id, approved: name === '/approve' }); return
-                }
                 case '/help': setPanel(builtinCommands.map(([name, description]) => `${name} · ${description}`).join('\n')); return
                 default: if (!view?.skills.skills.some(skill => `/${skill.name}` === name)) throw new Error('命令或技能不存在；输入 / 筛选。')
             }
@@ -267,14 +287,35 @@ export function TerminalApp({ runtime, initialSessionId, showResume = false }: {
     }
 
     useInput((input, key) => {
+        const editor = editorRef.current
         const inputSuggestions = !editorRef.current && !mentionsDismissedRef.current ? suggest(draftRef.current, cursorRef.current) : []
         const run = (operation: Promise<void>): void => { void operation.catch(cause => setError(cause instanceof SyntaxError ? '配置不是有效 JSON，请检查输入。' : editor?.secret ? '私密配置未保存，请检查格式与当前运行状态。' : cause instanceof Error ? cause.message : '操作未完成。')) }
         if (key.ctrl && input === 'c') { run(runtime.close().then(() => exit())); return }
         if (submitting.current && (editor || picker)) { setError('正在提交，请等待回执。'); return }
         if (key.escape) { if (editor) { editorRef.current = undefined; setEditor(undefined); edit(originalDraft.current, [...originalDraft.current].length) } else if (picker) setPicker(undefined); else if (panel) setPanel(undefined); else if (inputSuggestions.length) { mentionsDismissedRef.current = true; setMentionsDismissed(true) } else if (view) run(invoke({ type: 'stop', sessionId: view.id })); return }
+        if (approval && !editor && !picker && !panel) {
+            if (key.upArrow || key.downArrow) {
+                approvalChoiceRef.current = (approvalChoiceRef.current + (key.upArrow ? 2 : 1)) % 3
+                setApprovalChoice(approvalChoiceRef.current)
+            }
+            if (key.return && !submitting.current) {
+                const reply = async (approved: boolean, feedback?: string): Promise<void> => {
+                    const result = await runtime.command({ type: 'approve', sessionId: approval.sessionId, approvalId: approval.id, approved, ...(feedback ? { feedback } : {}) }) as { accepted: boolean }
+                    if (!result.accepted) throw new Error('该审批已结束，回复未发送。')
+                    await refresh()
+                }
+                if (approvalChoiceRef.current === 2) field('拒绝说明 · Enter 提交 · Esc 返回', '', async feedback => {
+                    if (!feedback.trim()) throw new Error('请填写拒绝说明。')
+                    if (feedback.trim().length > 8000) throw new Error('拒绝说明不能超过 8000 字符。')
+                    await reply(false, feedback.trim())
+                })
+                else { submitting.current = true; run(reply(approvalChoiceRef.current === 0).finally(() => { submitting.current = false })) }
+            }
+            return
+        }
         if (picker) {
             if (key.upArrow || key.downArrow) setChoice(index => (index + (key.upArrow ? -1 : 1) + picker.choices.length) % Math.max(1, picker.choices.length))
-            if (key.return && picker.choices[choice] && !submitting.current) { submitting.current = true; run(picker.choices[choice]!.action().finally(() => { submitting.current = false })) }
+            if (key.return && picker.choices[choiceRef.current] && !submitting.current) { submitting.current = true; run(picker.choices[choiceRef.current]!.action().finally(() => { submitting.current = false })) }
             return
         }
         if (key.tab) { complete(inputSuggestions); return }
@@ -306,7 +347,6 @@ export function TerminalApp({ runtime, initialSessionId, showResume = false }: {
         characters.splice(position, 0, ...insertion); edit(characters.join(''), position + [...insertion].length)
     })
 
-    const approval = view?.approvals[0]
     const compact = height < 18, suggestionCount = Math.max(1, Math.min(compact ? 4 : 8, height - (compact ? 8 : 14)))
     const suggestionStart = Math.max(0, Math.min(choice, suggestions.length - 1) - suggestionCount + 1)
     const suggestionRows = Math.min(suggestions.length, suggestionCount) + Number(suggestions.length > suggestionCount)
@@ -317,17 +357,16 @@ export function TerminalApp({ runtime, initialSessionId, showResume = false }: {
     const start = Math.min(Math.max(0, cursor - Math.floor(span / 2)), Math.max(0, characters.length - span))
     const beforeCursor = characters.slice(start, cursor).join('').replace(/\n/g, '↵'), afterCursor = characters.slice(cursor + 1, start + span).join('').replace(/\n/g, '↵')
     return <Box flexDirection="column" width={Math.max(20, width)} height={Math.max(12, height)} overflow="hidden" paddingX={1}>
-        {compact ? <Box height={1} flexShrink={0}><Text bold color="#58a6eb" wrap="truncate">QUIFOX · {view?.status ?? 'ready'}</Text></Box> : <Box gap={2} height={4} flexShrink={0}><Fox /><Box flexDirection="column" justifyContent="center" flexGrow={1} minWidth={0}><Text bold color="#58a6eb">QUIFOX</Text><Text dimColor wrap="truncate">{safe(currentModel ?? snapshot?.config.model.model ?? '正在连接…')} · {view?.status ?? 'ready'}</Text><Text dimColor wrap="truncate">{safe(view?.title ?? '新的编程会话')}</Text></Box></Box>}
-        {!compact && <Box height={1} flexShrink={0}><Text dimColor wrap="truncate-middle">{safe(view?.workspace ?? snapshot?.config.workspace ?? '')}</Text></Box>}
+        {compact ? <Box height={1} flexShrink={0}><Text bold color="#58a6eb" wrap="truncate">QUIFOX · {approval ? '等待批准' : statuses[view?.status ?? 'ready']}</Text></Box> : <Box gap={2} height={3} flexShrink={0}><Fox /><Box flexDirection="column" flexGrow={1} minWidth={0}><Text bold color="#58a6eb">QUIFOX <Text dimColor>{process.env.QUIFOX_VERSION ?? ''}</Text></Text><Text wrap="truncate">{safe(currentModel ?? snapshot?.config.model.model ?? '正在连接…')} <Text color={approval ? 'yellow' : view?.status === 'running' ? 'cyan' : 'gray'}>· {approval ? '等待批准' : statuses[view?.status ?? 'ready']}</Text></Text><Text dimColor wrap="truncate">{safe(view?.title === 'New session' ? '新会话' : view?.title ?? '新的编程会话')} · {safe(basename(view?.workspace ?? snapshot?.config.workspace ?? ''))}</Text></Box></Box>}
         <Box ref={viewport} flexDirection="column" flexGrow={1} flexShrink={1} minHeight={0} overflow="hidden" marginTop={1} contentOffsetY={panel ? Math.min(scroll, maxScroll) : Math.max(0, maxScroll - scroll)}>
         <Box ref={content} flexDirection="column" flexShrink={0}>
         {picker ? <Box flexDirection="column"><Text bold>{safe(picker.title)}</Text>{picker.choices.slice(Math.max(0, choice - 3), Math.max(0, choice - 3) + Math.max(3, height - 14)).map((item, index) => <Text key={index + Math.max(0, choice - 3)} inverse={index + Math.max(0, choice - 3) === choice} wrap="truncate">{index + Math.max(0, choice - 3) === choice ? '› ' : '  '}{safe(item.label)}</Text>)}<Text dimColor>↑↓ 选择 · Enter 确认 · Esc 返回</Text></Box> : panel ? <Box borderStyle="round" flexDirection="column" paddingX={1}><Text>{safe((observabilityPanel ? observabilityText(observation) : memoryPanel ? `${view?.memory.processing ? 'Memory 正在整理…\n' : ''}${view?.memory.error ? `${view.memory.error}\n` : ''}${view?.memory.content || (view?.memory.enabled ? 'Memory 当前为空。' : 'Memory 已关闭。')}` : panel).slice(0, 6000))}</Text></Box> :
-            <Box flexDirection="column" marginTop={1}>{view?.messages.slice(-6).map(entry => <Box key={entry.id} flexDirection="column" marginBottom={1}>
-                <Text color={entry.message.role === 'user' ? '#f4cf64' : entry.message.role === 'tool' ? '#9babc0' : '#58a6eb'} bold>{safe(entry.message.role === 'tool' ? entry.message.toolName : entry.message.role)}</Text>
-                <Text>{safe((entry.message.role === 'tool' ? toolResultText(entry.message.content) : entry.message.content).slice(-2200) || (entry.message.role === 'assistant' && entry.message.toolCalls?.length ? entry.message.toolCalls.map(toolSummary).join('\n') : ''))}</Text>
-            </Box>)}{live && <Box flexDirection="column"><Text>QuiFox</Text><Text>{safe(live.slice(-2200))}</Text></Box>}</Box>}
+            <Box flexDirection="column">{view?.messages.map(entry => <TerminalMessage key={entry.id} entry={entry} width={Math.max(8, width - 2)} {...(highlighter ? { highlighter } : {})}/>)}
+                {live && <TerminalMarkdown text={live} width={Math.max(8, width - 2)} {...(highlighter ? { highlighter } : {})}/>}</Box>}
         </Box></Box>
-        {approval && <Box borderStyle="round" flexDirection="column" paddingX={1} flexShrink={0}><Text bold wrap="truncate">需要批准：{safe(approval.call.name)}</Text><Text wrap="truncate-middle">{safe(approval.inspection?.summary ?? toolSummary(approval.call))}</Text><Text dimColor wrap="truncate">/approve · /deny · /trace 查看差异与参数</Text></Box>}
+        {approval && <Box borderStyle="round" borderColor="yellow" flexDirection="column" paddingX={1} flexShrink={0}><Text bold wrap="truncate">需要批准：{safe(approval.call.name)}</Text><Text dimColor wrap="truncate-middle">{safe(approval.inspection?.summary ?? toolSummary(approval.call))}</Text>
+            {!editor && ['批准这一次', '拒绝', '拒绝并回复'].map((label, index) => <Text key={label} bold={approvalChoice === index} color={approvalChoice === index ? 'cyan' : 'gray'}>{approvalChoice === index ? '› ' : '  '}{label}</Text>)}
+            {!compact && <Text dimColor>{editor ? '输入说明后提交；原消息草稿会保留。' : '↑↓ 选择 · Enter 确认 · Esc 停止'}</Text>}</Box>}
         {!!view?.pendingMessages.length && <Box height={1} flexShrink={0}><Text dimColor>{view.pendingMessages.length} 条待接纳消息</Text></Box>}
         {view?.unavailable && <Box height={1} flexShrink={0}><Text color="yellow" wrap="truncate">只读：{safe(view.unavailable)}</Text></Box>}
         {view?.displayTruncated && !compact && <Box height={1} flexShrink={0}><Text dimColor wrap="truncate">较长内容仅显示预览。</Text></Box>}
@@ -337,7 +376,7 @@ export function TerminalApp({ runtime, initialSessionId, showResume = false }: {
             <Box flexGrow={1} minWidth={0}><Text dimColor={index + suggestionStart !== choice} wrap="truncate">{safe(item.description)}</Text></Box>
         </Box>)}{suggestions.length > suggestionCount && <Text dimColor wrap="truncate">{suggestionStart + 1}–{Math.min(suggestions.length, suggestionStart + suggestionCount)} / {suggestions.length}</Text>}</Box>}
         {editor && <Text dimColor wrap="truncate">{safe(editor.label)}</Text>}
-        <Box borderStyle="single" borderLeft={false} borderRight={false} borderDimColor paddingX={1} height={3} flexShrink={0}><Text dimColor>› </Text><Text>{start > 0 ? '…' : ''}{beforeCursor}<Text inverse>{characters[cursor]?.replace(/\n/g, '↵') ?? ' '}</Text>{afterCursor}</Text></Box>
+        <Box borderStyle="round" borderColor={editor ? 'cyan' : 'gray'} paddingX={1} height={3} flexShrink={0}><Text color="cyan">› </Text><Text>{approval && !editor ? <Text dimColor>请先选择工具审批</Text> : <>{start > 0 ? '…' : ''}{beforeCursor}<Text inverse>{characters[cursor]?.replace(/\n/g, '↵') ?? ' '}</Text>{afterCursor}</>}</Text></Box>
     </Box>
 }
 

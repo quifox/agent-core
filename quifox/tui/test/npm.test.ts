@@ -21,7 +21,7 @@ test('the packed npm TUI installs its command without Bun or workspace dependenc
         const packed = JSON.parse((await execute(npm, [...npmArguments, 'pack', '--json', '--ignore-scripts', '--pack-destination', directory], { cwd: output })).stdout) as { filename: string; files: { path: string }[] }[]
         expect(packed[0]!.files.map(file => file.path).sort()).toEqual(expect.arrayContaining(['LICENSE', 'bin/cli.js', 'bin/process-supervisor-entry.js', 'bin/process-supervisor.js', 'licenses/inventory.json']))
         expect(packed[0]!.files.some(file => /(?:\.agents|config\.json|sessions|\.map$|build-inputs)/.test(file.path))).toBe(false)
-        expect(await readFile(join(output, 'bin/cli.js'), 'utf8')).not.toContain(repository)
+        expect((await readFile(join(output, 'bin/cli.js'), 'utf8')).includes(repository)).toBe(false)
         const inventory = JSON.parse(await readFile(join(output, 'licenses/inventory.json'), 'utf8')) as { name: string; notices: string[] }[]
         expect(inventory.find(item => item.name === '@quifox/agent-plugin-memory')?.notices.some(file => file.endsWith('/NOTICE'))).toBe(true)
         expect(inventory.filter(item => item.notices.length === 0)).toEqual([])

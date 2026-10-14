@@ -366,7 +366,7 @@ export class QuiFoxRuntime {
                 return { accepted: true }
                 } finally { entry.resuming = false }
             }
-            case 'approve': return { accepted: this.entry(command.sessionId).permissions.reply(command.approvalId, command.approved) }
+            case 'approve': return { accepted: this.entry(command.sessionId).permissions.reply(command.approvalId, command.approved, command.feedback) }
             case 'resources': {
                 const workspace = command.workspace === null ? this.workspaceParent() : resolve(command.workspace ?? this.options.workspace)
                 let directory = workspace
