@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { z } from 'zod'
 import { toolDenied, toolError, type AgentContext, type AgentHooks, type AgentPlugin, type AgentRunOutcome, type BeforeToolDecision, type ToolCall } from '@quifox/agent-core'
 import type { ChatInput } from '@quifox/agent-plugin-session'
 import type { ToolInspection } from './tool-presentation.js'
@@ -14,7 +15,8 @@ export interface PermissionGateOptions {
     operationId(call: ToolCall): string
     onRequest(request: ApprovalRequest): void
 }
-interface Pending { request: ApprovalRequest; resolve(approved: boolean): void }
+interface ApprovalAnswer { approved: boolean; feedback?: string }
+interface Pending { request: ApprovalRequest; resolve(answer: ApprovalAnswer): void }
 
 /** Approval is bound to the final operation identity and parameters, with an explicit tail guard. */
 export class PermissionGate implements AgentPlugin<ChatInput> {
@@ -53,16 +55,20 @@ export class PermissionGate implements AgentPlugin<ChatInput> {
     get pending(): ApprovalRequest[] { return [...this.requests.values()].map(item => structuredClone(item.request)) }
     get mode(): 'ask' | 'allow' | 'deny' { return this.options.mode() }
 
-    reply(id: string, approved: boolean): boolean {
+    reply(id: string, approved: boolean, feedback?: string): boolean {
         const pending = this.requests.get(id)
         if (!pending) return false
+        if (feedback !== undefined) {
+            if (approved) throw new Error('批准不能携带拒绝说明。')
+            feedback = z.string().trim().min(1).max(8000).parse(feedback)
+        }
         this.requests.delete(id)
-        pending.resolve(approved)
+        pending.resolve({ approved, ...(feedback ? { feedback } : {}) })
         return true
     }
 
     close(): void {
-        for (const request of this.requests.values()) request.resolve(false)
+        for (const request of this.requests.values()) request.resolve({ approved: false })
         this.requests.clear(); this.grants.clear()
     }
 
@@ -85,15 +91,15 @@ export class PermissionGate implements AgentPlugin<ChatInput> {
         const request: ApprovalRequest = { id: randomUUID(), sessionId: this.options.sessionId,
             operationId: this.options.operationId(call), call: structuredClone(call), ...(inspection ? { inspection } : {}) }
         const original = fingerprint(call) + (inspection?.authorizationIdentity ?? '')
-        let resolve!: (approved: boolean) => void
-        const answer = new Promise<boolean>(accept => { resolve = accept })
+        let resolve!: (answer: ApprovalAnswer) => void
+        const answer = new Promise<ApprovalAnswer>(accept => { resolve = accept })
         this.requests.set(request.id, { request, resolve })
         const aborted = (): void => { this.reply(request.id, false) }
         signal?.addEventListener('abort', aborted, { once: true })
         try {
             this.options.onRequest(structuredClone(request))
-            const approved = await answer
-            if (!approved) return { action: 'result', result: toolDenied(signal?.aborted ? '已停止待授权操作。' : '用户拒绝了工具操作。',
+            const { approved, feedback } = await answer
+            if (!approved) return { action: 'result', result: toolDenied(signal?.aborted ? '已停止待授权操作。' : `用户拒绝了工具操作。${feedback ? `\n用户说明：${feedback}` : ''}`,
                 { code: signal?.aborted ? 'USER_INTERRUPTED' : 'USER_DENIED' }) }
             this.grants.set(request.operationId, original)
             return { action: 'continue' }

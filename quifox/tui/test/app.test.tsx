@@ -83,7 +83,7 @@ it('refreshes the open Memory panel after background completion using only bound
 
 it.each([[20, 12], [40, 24], [80, 24]])('keeps the latest message, brand and input visible in %ix%i cells', async (columns, rows) => {
     const view: SessionView = { id: 'synthetic', title: 'Long output', workspace: '/synthetic/long/workspace/path', status: 'idle', updatedAt: '2026-01-01', resumeAvailable: false,
-        messages: [{ id: 'reply', origin: 'assistant', message: { role: 'assistant', content: Array.from({ length: 80 }, (_, index) => `line ${index}`).join('\n') + '\nfinal marker' } }],
+        messages: [{ id: 'reply', origin: 'assistant', message: { role: 'assistant', content: Array.from({ length: 80 }, (_, index) => `line ${index}  `).join('\n') + '\nfinal marker' } }],
         events: [], pendingMessages: [], skills: { skills: [], issues: [] }, guidance: [], backgroundTasks: [], toolStates: [], memory: { enabled: true, processing: false, content: '', summaries: 0 }, approvals: [] }
     const snapshot: RuntimeSnapshot = { configurationRevision: 'fixture', config: publicConfig(defaultConfig('/synthetic')), sessions: [view] }
     const runtime: TerminalRuntime = { close: async () => {}, subscribe: () => () => {}, command: async command => command.type === 'snapshot' ? structuredClone(command.sessionId ? view : snapshot) : {} }
@@ -121,9 +121,8 @@ it('renders the fox and actual approval, routes approve/steer/stop keys and clos
         await expect.poll(() => app.lastFrame()).toContain('需要批准：write_file')
         expect(app.lastFrame()).toContain('QUIFOX'); expect(app.lastFrame()).toContain('▼')
         app.stdin.write('y'); app.stdin.write('n')
-        await expect.poll(() => app.lastFrame()).toContain('yn')
         expect(commands.some(command => command.type === 'approve')).toBe(false)
-        app.stdin.write('\u007f'); app.stdin.write('\u007f'); app.stdin.write('/approve'); app.stdin.write('\r')
+        app.stdin.write('\r')
         await expect.poll(() => commands.some(command => command.type === 'approve' && command.approved)).toBe(true)
         await expect.poll(() => app.lastFrame()?.includes('需要批准')).toBe(false)
         app.stdin.write('next step')
@@ -134,6 +133,89 @@ it('renders the fox and actual approval, routes approve/steer/stop keys and clos
         await expect.poll(() => commands.some(command => command.type === 'stop')).toBe(true)
         app.stdin.write('\u0003')
         await expect.poll(() => close.mock.calls.length).toBe(1)
+    } finally { app.unmount() }
+})
+
+it('honors a rejection selected immediately before Enter without approving the tool', async () => {
+    const commands: RuntimeCommand[] = []
+    const view: SessionView = { id: 'approval-session', title: 'Approval task', workspace: '/synthetic', status: 'running', updatedAt: '2026-01-01', resumeAvailable: false,
+        messages: [], events: [], pendingMessages: [], skills: { skills: [], issues: [] }, guidance: [], backgroundTasks: [], toolStates: [],
+        memory: { enabled: false, processing: false, content: '', summaries: 0 },
+        approvals: [{ id: 'approval', sessionId: 'approval-session', operationId: 'operation', call: { id: 'call', name: 'write_file', input: { path: 'synthetic.txt' } } }] }
+    const snapshot: RuntimeSnapshot = { configurationRevision: 'fixture', config: publicConfig(defaultConfig('/synthetic')), sessions: [view] }
+    const runtime: TerminalRuntime = { close: async () => {}, subscribe: () => () => {}, command: async command => {
+        commands.push(command)
+        if (command.type === 'approve') view.approvals = []
+        return command.type === 'snapshot' ? structuredClone(command.sessionId ? view : snapshot) : { accepted: true }
+    } }
+    const app = render(<TerminalApp runtime={runtime} initialSessionId={view.id}/>)
+    try {
+        await expect.poll(() => app.lastFrame()).toContain('拒绝并回复')
+        app.stdin.write('\u001b[B'); app.stdin.write('\r')
+        await expect.poll(() => commands.find(command => command.type === 'approve')).toMatchObject({ approvalId: 'approval', approved: false })
+        expect(commands.some(command => command.type === 'submit')).toBe(false)
+    } finally { app.unmount() }
+})
+
+it('denies with a reply through the keyboard menu and restores the unsent message draft', async () => {
+    const commands: RuntimeCommand[] = []
+    let listener: ((event: RuntimeEvent) => void) | undefined
+    const view: SessionView = { id: 'feedback-session', title: 'Feedback task', workspace: '/synthetic', status: 'running', updatedAt: '2026-01-01', resumeAvailable: false,
+        messages: [], events: [], pendingMessages: [], skills: { skills: [], issues: [] }, guidance: [], backgroundTasks: [], toolStates: [], approvals: [],
+        memory: { enabled: false, processing: false, content: '', summaries: 0 } }
+    const snapshot: RuntimeSnapshot = { configurationRevision: 'fixture', config: publicConfig(defaultConfig('/synthetic')), sessions: [view] }
+    const runtime: TerminalRuntime = { close: async () => {}, subscribe: callback => { listener = callback; return () => { listener = undefined } }, command: async command => {
+        commands.push(command)
+        if (command.type === 'approve') view.approvals = []
+        return command.type === 'snapshot' ? structuredClone(command.sessionId ? view : snapshot) : { accepted: true }
+    } }
+    const app = render(<TerminalApp runtime={runtime} initialSessionId={view.id}/>)
+    try {
+        await expect.poll(() => app.lastFrame()).toContain('Feedback task')
+        app.stdin.write('unsent task')
+        await expect.poll(() => app.lastFrame()).toContain('unsent task')
+        view.approvals = [{ id: 'approval', sessionId: view.id, operationId: 'operation', call: { id: 'call', name: 'write_file', input: { path: 'synthetic.txt' } } }]
+        listener?.({ version: 1, sessionId: view.id, sequence: 1, timestamp: '2026-01-01T00:00:00Z', type: 'approval', data: view.approvals[0] })
+        await expect.poll(() => app.lastFrame()).toContain('拒绝并回复')
+        app.stdin.write('\u001b[A'); app.stdin.write('\r')
+        await expect.poll(() => app.lastFrame()).toContain('拒绝说明')
+        app.stdin.write('cancelled explanation'); app.stdin.write('\u001b')
+        await expect.poll(() => app.lastFrame()).toContain('拒绝并回复')
+        expect(app.lastFrame()).toContain('› 拒绝并回复')
+        expect(commands.some(command => command.type === 'approve')).toBe(false)
+        app.stdin.write('\r')
+        await expect.poll(() => app.lastFrame()).toContain('拒绝说明')
+        app.stdin.write('请先读取文件'); app.stdin.write('\r')
+        await expect.poll(() => commands.find(command => command.type === 'approve')).toMatchObject({ approved: false, feedback: '请先读取文件' })
+        await expect.poll(() => app.lastFrame()).toContain('unsent task')
+        expect(commands.some(command => command.type === 'submit')).toBe(false)
+    } finally { app.unmount() }
+})
+
+it('keeps DeepSeek protocol selection in the connection picker without a raw Provider field', async () => {
+    const commands: RuntimeCommand[] = []
+    const view: SessionView = { id: 'models-session', title: 'Model task', workspace: '/synthetic', status: 'idle', updatedAt: '2026-01-01', resumeAvailable: false,
+        messages: [], events: [], pendingMessages: [], skills: { skills: [], issues: [] }, guidance: [], backgroundTasks: [], toolStates: [], approvals: [],
+        memory: { enabled: false, processing: false, content: '', summaries: 0 } }
+    const snapshot: RuntimeSnapshot = { configurationRevision: 'fixture', config: publicConfig(defaultConfig('/synthetic')), sessions: [view] }
+    const runtime: TerminalRuntime = { close: async () => {}, subscribe: () => () => {}, command: async command => {
+        commands.push(command); return command.type === 'snapshot' ? structuredClone(command.sessionId ? view : snapshot) : { accepted: true }
+    } }
+    const app = render(<TerminalApp runtime={runtime} initialSessionId={view.id}/>)
+    try {
+        await expect.poll(() => app.lastFrame()).toContain('Model task')
+        app.stdin.write('/model'); app.stdin.write('\r')
+        await expect.poll(() => app.lastFrame()).toContain('添加模型连接')
+        app.stdin.write('\u001b[B'); app.stdin.write('\r')
+        await expect.poll(() => app.lastFrame()).toContain('连接类型')
+        app.stdin.write('\r')
+        for (const [label, value] of [['配置名称', 'review-model'], ['模型名称', 'deepseek-flash'], ['Base URL', 'https://api.deepseek.com'], ['上下文容量', '100000'], ['最大输出 Tokens', ''], ['API Key', 'synthetic-key']]) {
+            await expect.poll(() => app.lastFrame()).toContain(`添加模型 · ${label}`)
+            expect(app.lastFrame()).not.toContain('Provider')
+            if (value) app.stdin.write(value)
+            app.stdin.write('\r')
+        }
+        await expect.poll(() => commands.find(command => command.type === 'config')).toMatchObject({ patch: { models: [{ id: 'review-model', provider: 'deepseek', model: 'deepseek-flash' }] } })
     } finally { app.unmount() }
 })
 
@@ -198,7 +280,7 @@ it('distinguishes identically titled sessions in the resume picker without dupli
     } }
     const app = render(<TerminalApp runtime={runtime} initialSessionId="first" />)
     try {
-        await expect.poll(() => app.lastFrame()).toContain('New session')
+        await expect.poll(() => app.lastFrame()).toContain('新会话')
         app.stdin.write('/resume'); app.stdin.write('\r')
         await expect.poll(() => app.lastFrame()).toContain('恢复主会话')
         expect(error.mock.calls.some(call => String(call[0]).includes('same key'))).toBe(false)
@@ -234,7 +316,7 @@ it('starts a fresh main session and filters slash commands with Tab completion',
         app.stdin.write('\t')
         await expect.poll(() => app.lastFrame()).toContain('/config')
         app.stdin.write('\r')
-        await expect.poll(() => app.lastFrame()).toContain('工具授权')
+        await expect.poll(() => app.lastFrame()).toContain('全局工具权限')
     } finally { app.unmount() }
 })
 

@@ -4,6 +4,20 @@
 
 A React/Ink terminal Host with the blue fox, yellow ears and **QUIFOX** wordmark. It uses [shared-runtime](../runtime/README.md) for every Agent capability.
 
+Assistant messages render Markdown headings, lists, tables and syntax-highlighted code. User messages appear as white rows with black text; the transcript omits role labels. Color is disabled when `NO_COLOR` is set.
+
+The npm installation package is named `quifox`; it runs the same TUI on Node.js 22.12+ without a separate Bun installation. Registry publication is separate from building the package. To try the prepared artifact locally, run from the repository root:
+
+```sh
+bun run --filter @quifox/tui npm:build
+cd quifox/release/npm/quifox
+npm pack --ignore-scripts
+npm install --global ./quifox-0.1.0.tgz
+quifox
+```
+
+Run `quifox` from your project directory after installation; `--workspace` is an optional override. Published installation will use `npm install --global quifox` or `npx quifox`. The npm artifact bundles the shared Host and framework plugins, so those workspace packages do not need separate publication.
+
 After the workspace build, start from the repository root:
 
 ```sh
@@ -21,7 +35,7 @@ Normal startup opens a new main session. `--resume` opens a history picker; `--r
 | Up / Down | Filter/select commands or scroll output |
 | Escape | Close a panel or request stop |
 | Ctrl+C | Close the Host and exit |
-| `/approve`, `/deny` | Reply to the displayed approval |
+| Up / Down, then Enter in an approval | Approve once, deny, or deny with a reply |
 | `/new [directory]`, `/resume`, `/open SESSION_ID` | Create or explicitly select a session |
 | `/tasks` | Select a child task or return to its parent |
 | `/spawn [--fork] [count] [instructions]` | Create idle children; copy the parent prefix only with `--fork` |
@@ -34,7 +48,7 @@ Use `$skill-name` to select a Skill whose name conflicts with a built-in command
 
 `/spawn 3 Review these requirements` returns three names and IDs with empty history, without requesting a model. Use `/spawn --fork 3 Review the agreed plan` to copy the safe parent prefix. QuiFox allows one child level. `@Turing @Curie Review the code @Newton Search related issues` broadcasts the first message to Turing/Curie and sends a separate message to Newton. Use returned names or IDs; completion includes model-created children. Failed deliveries keep the draft for an identity-preserving retry.
 
-Set Queue/Steer in `/config`: Queue waits for complete execution and cleanup; Steer joins the next complete request boundary. Unknown tool effects remain unknown. Ordinary `y`/`n` text never grants approval. The terminal viewport keeps the brand and input visible; long drafts show the area around the cursor. The approval card previews the operation; `/trace` opens its real parameters, receipts and file differences.
+Set Queue/Steer and global tool permissions in `/config`; current-session permissions have a separate menu. Queue waits for complete execution and cleanup; Steer joins the next complete request boundary. Unknown tool effects remain unknown. Ordinary `y`/`n` text never grants approval. The approval menu previews the operation and uses explicit keyboard selection. Denying with a reply appends your explanation to the original tool result, preserving the message draft. The terminal viewport keeps the brand and input visible; long drafts show the area around the cursor. `/trace` opens real parameters, receipts and file differences.
 
 Add a standard stdio server from the command line, then use `/mcp` to connect:
 

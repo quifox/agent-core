@@ -55,6 +55,15 @@ jobs:
           if [[ "$RUNNER_OS" == "Windows" ]]; then cli_path+=.exe; fi
           "$cli_path" --version
           "$cli_path" --help
+      - name: Build npm TUI bundle
+        working-directory: quifox/tui
+        run: bun run npm:build
+      - name: Pack npm TUI
+        working-directory: quifox/release/npm/quifox
+        run: npm pack --ignore-scripts --pack-destination ..
+      - name: Verify npm installation
+        working-directory: quifox/tui
+        run: bun run test -- test/npm.test.ts
       - name: Build desktop installer
         working-directory: quifox/desktop
         run: bun run desktop:build -- --verbose --bundles ${{ matrix.bundles }}
@@ -73,6 +82,7 @@ jobs:
             quifox/desktop/src-tauri/target/release/bundle/**/*.deb
             quifox/desktop/src-tauri/target/release/bundle/**/*.exe
             quifox/release/bin/*
+            quifox/release/npm/*.tgz
             quifox/release/licenses/**
           if-no-files-found: error
           retention-days: 14

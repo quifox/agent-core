@@ -1,7 +1,11 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 import { render } from 'ink'
+import chalk, { chalkStderr } from 'chalk'
 import { QuiFoxRuntime, commandSupervisor, type SessionView } from '@quifox/shared-runtime'
 import { TerminalApp } from './app.js'
+
+// Ink uses Chalk's shared instances, which do not read NO_COLOR themselves.
+if (process.env.NO_COLOR !== undefined) { chalk.level = 0; chalkStderr.level = 0 }
 
 function argument(name: string): string | undefined { const index = process.argv.indexOf(name); return index < 0 ? undefined : process.argv[index + 1] }
 const root = argument('--root') ?? process.env.QUIFOX_ROOT
@@ -15,7 +19,7 @@ if (process.argv.includes('--quifox-supervisor')) {
 } else if (process.argv.includes('--version')) {
     process.stdout.write(`QuiFox ${process.env.QUIFOX_VERSION ?? 'development'}\n`)
 } else if (process.argv.includes('--help')) {
-    process.stdout.write('QUIFOX · Bun terminal Agent\n--workspace <directory>  --root <isolated app directory>  --prompt <one turn>  --resume [sessionId]\nNew invocations start fresh conversations; --resume opens the history picker.\nmcp add <id> -- <command> [args...]  |  mcp add <id> --url <HTTP URL>  |  mcp list  |  mcp remove <id>\nMODEL_API_KEY / MODEL_BASE_URL / MODEL_ID configure the default Chat connection.\n')
+    process.stdout.write('QUIFOX · terminal Agent\n--workspace <directory>  --root <isolated app directory>  --prompt <one turn>  --resume [sessionId]\nNew invocations start fresh conversations; --resume opens the history picker.\nmcp add <id> -- <command> [args...]  |  mcp add <id> --url <HTTP URL>  |  mcp list  |  mcp remove <id>\nMODEL_API_KEY / MODEL_BASE_URL / MODEL_ID configure the default Chat connection.\n')
 } else {
     const runtime = await QuiFoxRuntime.open({ ...(root ? { root } : {}), ...(workspace ? { workspace } : {}) })
     try {
