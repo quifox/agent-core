@@ -4,6 +4,8 @@
 
 React/Ink 终端宿主，展示蓝身体、黄耳朵狐狸与 **QUIFOX**。所有 Agent 能力使用 [共享运行时](../runtime/README.zh-CN.md)。
 
+助手正文渲染 Markdown 标题、列表、表格与代码高亮；用户消息使用白底黑字整行，正文不显示角色标签。设置 `NO_COLOR` 时关闭颜色。
+
 npm 安装包名为 `quifox`，通过 Node.js 22.12+ 执行同一 TUI，无须另装 Bun。构建安装包与发布到注册表是两个步骤。在仓库根目录运行以下命令，可以试用本地安装包：
 
 ```sh
@@ -33,7 +35,7 @@ bun run quifox/tui/src/cli.tsx --workspace /path/to/project
 | Up / Down | 筛选/选择命令或滚动输出 |
 | Escape | 关闭面板或请求停止 |
 | Ctrl+C | 收尾 Host 并退出 |
-| `/approve`、`/deny` | 回复当前显示的审批 |
+| 审批中按上下键，再按 Enter | 批准一次、拒绝或拒绝并回复 |
 | `/new [目录]`、`/resume`、`/open 会话ID` | 创建或显式选择会话 |
 | `/tasks` | 进入子任务或返回父会话 |
 | `/spawn [--fork] [数量] [说明]` | 创建待机子 Agent，只有 `--fork` 复制父前缀 |
@@ -46,7 +48,7 @@ bun run quifox/tui/src/cli.tsx --workspace /path/to/project
 
 `/spawn 3 审查这些需求` 返回三个名称与 ID，默认空历史，不请求模型；`/spawn --fork 3 审查既有计划` 才复制父安全前缀。QuiFox 首期只允许一层子 Agent。`@Turing @Curie 审查代码 @Newton 搜索相关问题` 向 Turing/Curie 广播第一段，向 Newton 发送第二段。使用返回的名称或 ID；补全也包含模型创建的子 Agent。部分派发失败时保留草稿，重试沿用原输入身份。
 
-Queue/Steer 在 `/config` 配置：Queue 等待完整执行与收尾，Steer 在下一完整请求边界加入。未知工具副作用保持未知；普通 `y`/`n` 文本不触发授权。终端视口保留品牌与输入区，长草稿显示光标附近内容；审批卡展示操作摘要，`/trace` 查看实际参数、回执与文件差异。
+Queue/Steer 与全局工具权限在 `/config` 配置，当前会话权限使用独立菜单。Queue 等待完整执行与收尾，Steer 在下一完整请求边界加入。未知工具副作用保持未知；普通 `y`/`n` 文本不触发授权。审批菜单预览操作，通过明确的键盘选择回复；拒绝并回复会把说明追加到原工具回执，保留原消息草稿。终端视口保留品牌与输入区，长草稿显示光标附近内容；`/trace` 查看实际参数、回执与文件差异。
 
 命令行添加标准 stdio server 后，可在 `/mcp` 连接：
 

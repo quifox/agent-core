@@ -81,7 +81,7 @@ export type RuntimeCommand =
     | { type: 'inbox'; sessionId: string; action: 'cancel' | 'steer'; messageId: string }
     | { type: 'stop'; sessionId: string; waitForExit?: boolean; timeoutMs?: number }
     | { type: 'resume'; sessionId: string; mode: 'continue' | 'replan' }
-    | { type: 'approve'; sessionId: string; approvalId: string; approved: boolean }
+    | { type: 'approve'; sessionId: string; approvalId: string; approved: boolean; feedback?: string }
     | { type: 'config'; patch: unknown }
     | { type: 'refresh-models' }
     | { type: 'model-catalog'; provider?: string; refresh?: boolean }
@@ -116,7 +116,8 @@ export const runtimeCommandSchema = z.discriminatedUnion('type', [
     z.object({ type: z.literal('submit'), sessionId, prompt: z.string().refine(value => !!value.trim(), 'Message must not be empty.'), mode: z.enum(['steer', 'queue']).optional(), messageId: z.string().min(1).max(200).optional() }).strict(),
     z.object({ type: z.literal('inbox'), sessionId, action: z.enum(['cancel', 'steer']), messageId: z.string().min(1).max(200) }).strict(),
     z.object({ type: z.literal('stop'), sessionId, waitForExit: z.boolean().optional(), timeoutMs: z.number().int().min(0).max(300_000).optional() }).strict(), z.object({ type: z.literal('resume'), sessionId, mode: z.enum(['continue', 'replan']) }).strict(),
-    z.object({ type: z.literal('approve'), sessionId, approvalId: z.string().min(1), approved: z.boolean() }).strict(),
+    z.object({ type: z.literal('approve'), sessionId, approvalId: z.string().min(1), approved: z.boolean(), feedback: z.string().trim().min(1).max(8000).optional() }).strict()
+        .refine(value => !value.approved || value.feedback === undefined, '批准不能携带拒绝说明。'),
     z.object({ type: z.literal('config'), patch: z.unknown() }).strict(), z.object({ type: z.literal('refresh-models') }).strict(),
     z.object({ type: z.literal('model-catalog'), provider: z.string().min(1).max(100).optional(), refresh: z.boolean().optional() }).strict(),
     z.object({ type: z.literal('memory'), sessionId }).strict(), z.object({ type: z.literal('close') }).strict()

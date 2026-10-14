@@ -1,7 +1,11 @@
 #!/usr/bin/env node
 import { render } from 'ink'
+import chalk, { chalkStderr } from 'chalk'
 import { QuiFoxRuntime, commandSupervisor, workflowChild, type SessionView } from '@quifox/shared-runtime'
 import { TerminalApp } from './app.js'
+
+// Ink uses Chalk's shared instances, which do not read NO_COLOR themselves.
+if (process.env.NO_COLOR !== undefined) { chalk.level = 0; chalkStderr.level = 0 }
 
 function argument(name: string): string | undefined { const index = process.argv.indexOf(name); return index < 0 ? undefined : process.argv[index + 1] }
 const root = argument('--root') ?? process.env.QUIFOX_ROOT
