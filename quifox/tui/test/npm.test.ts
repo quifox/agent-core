@@ -16,7 +16,7 @@ const npmArguments = process.platform === 'win32' ? [join(dirname(process.execPa
 test('the packed npm TUI installs its command without Bun or workspace dependencies', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'quifox-npm-'))
     try {
-        const output = join(directory, 'package'), prefix = join(directory, 'installation')
+        const output = join(directory, 'package'), prefix = join(directory, 'installation folder')
         await execute('bun', ['run', 'quifox/tui/scripts/build-npm.ts', output], { cwd: repository })
         const packed = JSON.parse((await execute(npm, [...npmArguments, 'pack', '--json', '--ignore-scripts', '--pack-destination', directory], { cwd: output })).stdout) as { filename: string; files: { path: string }[] }[]
         expect(packed[0]!.files.map(file => file.path).sort()).toEqual(expect.arrayContaining(['LICENSE', 'bin/cli.js', 'bin/process-supervisor-entry.js', 'bin/process-supervisor.js', 'licenses/inventory.json']))
@@ -30,7 +30,7 @@ test('the packed npm TUI installs its command without Bun or workspace dependenc
         await execute(npm, [...npmArguments, 'install', '--global', '--prefix', prefix, '--ignore-scripts', '--no-audit', '--no-fund', join(directory, packed[0]!.filename)])
         const command = process.platform === 'win32' ? join(prefix, 'quifox.cmd') : join(prefix, 'bin', 'quifox')
         const result = process.platform === 'win32'
-            ? await execute('cmd.exe', ['/d', '/s', '/c', `""${command}" --version"`])
+            ? await execute('cmd.exe', ['/d', '/s', '/c', `""${command}" --version"`], { windowsVerbatimArguments: true })
             : await execute(command, ['--version'], { env: { ...process.env, PATH: dirname(process.execPath) } })
         const manifest = JSON.parse(await readFile(join(repository, 'quifox/tui/package.json'), 'utf8')) as { version: string }
         expect(result.stdout.trim()).toBe(`QuiFox ${manifest.version}`)
