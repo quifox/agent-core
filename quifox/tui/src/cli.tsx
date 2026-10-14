@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { render } from 'ink'
-import { QuiFoxRuntime, commandSupervisor, type SessionView } from '@quifox/shared-runtime'
+import { QuiFoxRuntime, commandSupervisor, workflowChild, type SessionView } from '@quifox/shared-runtime'
 import { TerminalApp } from './app.js'
 
 function argument(name: string): string | undefined { const index = process.argv.indexOf(name); return index < 0 ? undefined : process.argv[index + 1] }
@@ -8,7 +8,11 @@ const root = argument('--root') ?? process.env.QUIFOX_ROOT
 const workspace = argument('--workspace') ?? process.env.QUIFOX_WORKSPACE
 const prompt = argument('--prompt')
 const resume = argument('--resume')
-if (process.argv.includes('--quifox-supervisor')) {
+if (process.argv.includes('--quifox-workflow-child')) {
+    const path = argument('--quifox-workflow-child')
+    if (!path) throw new Error('Missing workflow cell path.')
+    await workflowChild(path)
+} else if (process.argv.includes('--quifox-supervisor')) {
     const input = JSON.parse(argument('--quifox-supervisor') ?? '{}') as { command: string; cwd: string }
     if (typeof input.command !== 'string' || typeof input.cwd !== 'string') throw new Error('Invalid command supervisor arguments.')
     await commandSupervisor(input.command, input.cwd)

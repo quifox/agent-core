@@ -1,5 +1,21 @@
 # QuiFox 共享 Host
 
+## TypeScript 工作流
+
+工作流由独立 WorkflowToolsPlugin 与 WorkflowModelPlugin 接入；Host 拥有脚本库、编译、子进程与 Agent 装配。私有应用包 workflow-engine 派生自 ZCode，固定来源版本并保留 Apache-2.0 LICENSE/NOTICE；不修改 Core。脚本使用普通 TypeScript 与 agent().ask()，可选函数 JSDoc @phase 转为同一分析和执行输入；图从实际 AST/类型分析产生，不要求作者编写边、节点身份或独立图定义。
+
+支持层拥有脚本检查、加载、执行、检查点、插件绑定与图投影；生成脚本的业务逻辑由脚本作者负责。检查失败给出诊断，不自动改写意图、分支、提示词或业务行为。运行模板是示例，不是自动生产保证。
+
+脚本库位于应用资料根 workflows/*.ts；保存前检查，名称限制为单层文件名，读写拒绝符号链接。已有会话固定保存其所运行脚本，更新文件不静默改变历史会话。每次工作流回合创建空上下文的内部 Agent，同一 actor 的多次 ask 复用该回合的会话；外层会话只把 user/assistant 输入输出传入 args.messages。内部 Agent 复用共享 Host 的模型、授权、工具、观察与持久化，不能递归启动工作流或子 Agent，工具权限不能超过外层。
+
+工作流插件绑定 typescript-workflows Skill，由既有 Skills catalog 自动发现；skill_load 渐进加载正文，skill_read 读取动态业务插件目录、恢复说明与模板，基础设施不重复展示。RAGFlow 插件暴露 knowledge_retrieve，可直接调用，也可通过 agent(name, {plugins:["ragflow"]}) 使用。tools 可缩小内部 Agent 的工具范围，但不能扩大父权限。检索连接在私有配置中，公开状态仅显示是否配置；脚本不接触密钥、Node 模块或 fetch。运行事件沿已有 Session journal 保存并投影节点状态；停止覆盖子进程与所有内部工具。脚本执行隔离用于本地受信工作流，不承诺 Node VM 是安全边界。
+
+引擎检查点保存到资料根 workflow-runs，节点结果写入并 fsync 后才向脚本返回，按脚本、输入身份与原 actor 身份恢复。恢复从入口重放确定性控制流，已完成节点复用原结果；内部 Agent 接回自己的 Session。未知工具结果由既有 replan 补齐未知/打断回执，不静默重试副作用，不承诺外部 exactly-once。本地检查点不包含任意 JavaScript 堆，模板应使用稳定 args 和具名 actor；无相应业务幂等协议的写入不能靠模板宣称安全。模板包含只读检索重试与并行汇合，当前恢复与平台故障边界通过真实行为测试单独验证。
+
+检查点按会话、外层输入与脚本/参数身份隔离；只保留当前外层输入的检查点，新输入已持久化接纳后清理该会话更早输入的检查点及生成执行体。包含输入的生成执行体只写入私有应用资料根；内部 Agent 的工具仍使用实际工作目录。同一输入内的多个工作流调用均可重放。WAL 写入、同步或关闭失败后停止后续持久化与业务推进，记录本地诊断；不能发布成功。恢复仅丢弃不完整尾行，闭合损坏行明确失败。
+
+显式部署保存的工作流启动 Bearer 认证的本机 HTTP 服务，复用同一 Host 命令与会话；POST /runs 接受 question/可选 sessionId，GET /runs/:id 查看结果，POST /runs/:id/stop 停止。按工作流名称与工作目录唯一部署，重复请求返回同一服务，运行固定使用部署时脚本。Token 只在显式管理回执中提供，不进入配置、事件、服务目录和普通快照；只读访问限于该部署创建的会话。关闭弹窗只隐藏管理面板，停止 API 命令关闭其连接与运行。服务随 Host 关闭，不自动绑定公网，不宣称已有远程生产部署平台。
+
 本 Host 提供 TUI 与 Tauri/Bun sidecar 的唯一能力入口，组合原 Core 和插件；UI 只提交命令并读取带会话/运行/序列身份的真实事件。Core 源码不变，当前仅装配 Chat Model。
 
 子智能体创建默认空历史，模型工具仅显式 mode:fork 时复制父上下文；`/spawn` 同样默认空历史，`/spawn --fork` 才复制安全前缀。首期只允许主会话创建一层子 Agent：子会话不装配 subagent_start，Host 创建入口也拒绝后代创建，不新增递归深度配置。子请求的 agent-role 贡献明确其真实名称、taskId 与父会话身份，继承历史仅为背景；子文本不被用来判断任务身份。wait 回包的 taskId/name/status 来自插件记录，text 保留原始子回复。
@@ -84,5 +100,7 @@ MCP 启停只有条目的 enabled 字段；全局 .quifox/config.json 提供默�
 - Git 工作目录的命令执行前后观察文件变化，减去已有未提交编辑；命令失败后的实际修改仍展示，不假设失败即回滚。观察只限工作目录内、最多百个文本文件与单文件 1 MB，超出明确标记；非 Git、二进制、进程期间 commit 清理掉的状态与外部并发修改不提供完整归因保证。原生编辑工具继续提供确定的自身前后内容，同轮同文件聚合首个 before 与最后 after。
 
 工具链为 Bun + strict TypeScript；验证继续使用 Vitest/Node。DeepSeek 默认模型/容量的来源为 [官方模型文档](https://api-docs.deepseek.com/quick_start/pricing/)，models.dev 资料由 Host 显式刷新/缓存；资料可见不代表真实链路通过。
+
+- LangChain 是独立的 Skill 集插件。启用后通过已有 Skills 发现/加载/读取工具提供随应用打包的技能与引用文件；停用或移除后不再发现。原 LangGraph Skill 名称与 API 原文保留，插件展示名统一 LangChain。该插件不注册业务执行工具、不创建另一套工作流执行器、不安装 Python/TypeScript 框架依赖、不自动运行文档中的命令。其工作流脚本不能假定由 QuiFox 工作流支持层直接执行。
 
 TUI 的 npm 分发名为 `quifox`，命令同名；包只拥有安装入口与同一 TUI/Host 的 Node.js 22.12+ ESM bundle，不要求用户另装 Bun，不发布开发 workspace 或通用框架包。包携带 shell supervisor 的两个相邻入口、根 LICENSE、Memory LICENSE/NOTICE 与实际打包依赖的许可证；不包含配置、会话、源映射或构建输入路径。Bun 继续拥有开发构建与原生 CLI 编译，npm 安装不创建第二套运行逻辑。生成 manifest 保持 private，正式发布另行授权。

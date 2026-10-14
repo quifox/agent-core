@@ -21,9 +21,11 @@ test('the packed npm TUI installs its command without Bun or workspace dependenc
         const packed = JSON.parse((await execute(npm, [...npmArguments, 'pack', '--json', '--ignore-scripts', '--pack-destination', directory], { cwd: output })).stdout) as { filename: string; files: { path: string }[] }[]
         expect(packed[0]!.files.map(file => file.path).sort()).toEqual(expect.arrayContaining(['LICENSE', 'bin/cli.js', 'bin/process-supervisor-entry.js', 'bin/process-supervisor.js', 'licenses/inventory.json']))
         expect(packed[0]!.files.some(file => /(?:\.agents|config\.json|sessions|\.map$|build-inputs)/.test(file.path))).toBe(false)
-        expect(await readFile(join(output, 'bin/cli.js'), 'utf8')).not.toContain(repository)
+        expect((await readFile(join(output, 'bin/cli.js'), 'utf8')).includes(repository)).toBe(false)
         const inventory = JSON.parse(await readFile(join(output, 'licenses/inventory.json'), 'utf8')) as { name: string; notices: string[] }[]
         expect(inventory.find(item => item.name === '@quifox/agent-plugin-memory')?.notices.some(file => file.endsWith('/NOTICE'))).toBe(true)
+        expect(inventory.find(item => item.name === '@quifox/workflow-engine')?.notices.some(file => file.endsWith('/NOTICE'))).toBe(true)
+        expect(inventory.find(item => item.name === 'langchain-skills')?.notices.some(file => file.endsWith('/LICENSE'))).toBe(true)
         expect(inventory.filter(item => item.notices.length === 0)).toEqual([])
         for (const item of inventory) for (const file of item.notices) expect((await readFile(join(output, 'licenses', file), 'utf8')).trim()).not.toBe('')
         await mkdir(prefix, { recursive: true })
@@ -44,9 +46,10 @@ test('the packed npm TUI installs its command without Bun or workspace dependenc
             const command = process.platform === 'win32' ? `"${process.execPath}" -p "process.cwd()"` : `'${process.execPath.replace(/'/g, "'\\''")}' -p 'process.cwd()'`
             const delta = requests.length === 1
                 ? { tool_calls: [{ index: 0, id: 'synthetic-command', type: 'function', function: { name: 'run_command', arguments: JSON.stringify({ command }) } }] }
-                : { content: 'package-tool-completed' }
+                : requests.length === 3 ? { tool_calls: [{ index: 0, id: 'synthetic-workflow', type: 'function', function: { name: 'workflow_run', arguments: JSON.stringify({ script: 'return await agent("Answer").ask("workflow-probe");', input: {} }) } }] }
+                : { content: requests.length === 4 ? 'packaged-workflow-answer' : 'package-tool-completed' }
             response.writeHead(200, { 'Content-Type': 'text/event-stream' })
-            response.end(`data: ${JSON.stringify({ choices: [{ delta }] })}\n\ndata: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: requests.length === 1 ? 'tool_calls' : 'stop' }] })}\n\ndata: [DONE]\n\n`)
+            response.end(`data: ${JSON.stringify({ choices: [{ delta }] })}\n\ndata: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: requests.length === 1 || requests.length === 3 ? 'tool_calls' : 'stop' }] })}\n\ndata: [DONE]\n\n`)
         })
         server.listen(0, '127.0.0.1'); await once(server, 'listening')
         try {
@@ -61,6 +64,12 @@ test('the packed npm TUI installs its command without Bun or workspace dependenc
             const receipt = JSON.parse(requests[1]!.messages.find(message => message.role === 'tool')!.content) as { stdout: string; exitCode: number }
             expect(receipt.stdout.trim()).toBe(await realpath(workspace))
             expect(receipt.exitCode).toBe(0)
+            const workflow = await execute(process.execPath, [binary, '--root', root, '--prompt', 'Run the synthetic workflow.'], { cwd: workspace,
+                env: { ...process.env, HOME: directory, USERPROFILE: directory, PATH: dirname(process.execPath), MODEL_API_KEY: '', MODEL_BASE_URL: '', MODEL_ID: '', QUIFOX_WORKSPACE: '', QUIFOX_ROOT: '' } })
+            expect(workflow.stdout.trim()).toBe('package-tool-completed')
+            expect(requests).toHaveLength(5)
+            expect(requests[3]!.messages.at(-1)?.content).toBe('workflow-probe')
+            expect(requests[4]!.messages.find(message => message.role === 'tool')?.content).toContain('工作流运行完成')
         } finally { server.closeAllConnections(); server.close() }
     } finally { await rm(directory, { recursive: true, force: true }) }
 }, 60_000)

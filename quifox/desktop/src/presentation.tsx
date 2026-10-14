@@ -10,11 +10,18 @@ import fox from './assets/fox.svg'
 import { EmptyState, StatusMessage } from './ui.js'
 import { Icon } from './icons.js'
 import { OperationView, ReadableValue } from './operation-view.js'
+import { WorkflowCard } from './workflows.js'
+import { Children, isValidElement } from 'react'
 
 export const statuses: Record<string, string> = { idle: '就绪', running: '执行中', stopped: '已停止', error: '失败', success: '完成', completed: '完成', failed: '失败', denied: '已拒绝', approval: '待批准', unknown: '结果未知', 'not-started': '未执行', cancelled: '已取消', committed: '已提交' }
 
 export const MarkdownBody = memo(function MarkdownBody({ content, openFile }: { content: string; openFile?: ((path: string) => void) | undefined }) {
     return <div className="markdown"><Markdown remarkPlugins={[remarkGfm]} skipHtml components={{
+        pre: ({ children }) => {
+            const child = Children.toArray(children)[0]
+            if (isValidElement<{ className?: string; children?: React.ReactNode }>(child) && child.props.className === 'language-dynamic-workflow') return <WorkflowCard script={String(child.props.children ?? '').replace(/\n$/, '')}/>
+            return <pre>{children}</pre>
+        },
         a: ({ href, children }) => <a href={href} target="_blank" rel="noopener noreferrer" onClick={event => {
             if (href && !/^[a-z][a-z0-9+.-]*:/i.test(href) && !href.startsWith('#') && openFile) { event.preventDefault(); openFile(href.split('#')[0]!) }
         }}>{children}</a>,

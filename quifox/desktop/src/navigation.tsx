@@ -3,7 +3,7 @@ import type { SessionSummary } from '@quifox/shared-runtime'
 import { Icon } from './icons.js'
 
 export interface NavigationLocation {
-    panel: 'chat' | 'settings' | 'plugins'
+    panel: 'chat' | 'settings' | 'plugins' | 'workflows'
     sessionId?: string | undefined
     workspace?: string | null | undefined
     pluginId?: string | undefined

@@ -10,6 +10,8 @@ English | [简体中文](README.zh-CN.md)
 
 QuiFox provides a default execution loop and Hooks across its lifecycle. Plugins add model generation, sessions, prompts, Tools, interruption, recovery, compaction, events, child tasks, and teams.
 
+**Applications:** [QuiFox TUI and Desktop](quifox/README.md) — installation, source startup and model configuration.
+
 Mutable Context and Hook data give plugin authors room to experiment. Coordination between plugins depends on their shared capabilities, ordering, and lifecycle contracts.
 
 ## Design demo

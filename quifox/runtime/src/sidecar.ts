@@ -4,6 +4,7 @@ import { QuiFoxRuntime } from './runtime.js'
 import { commandSupervisor } from './process-supervisor.js'
 import { displayFrame } from './display-projection.js'
 import { PresentationBridge } from './presentation-host.js'
+import { workflowChild } from './workflow-child.js'
 
 function argument(name: string): string | undefined { const index = process.argv.indexOf(name); return index < 0 ? undefined : process.argv[index + 1] }
 let output = Promise.resolve()
@@ -24,7 +25,11 @@ async function close(): Promise<void> {
     closing ??= (async () => { presentation.close(); await runtime?.close(); await output.catch(() => {}) })()
     return closing
 }
-if (process.argv.includes('--quifox-supervisor')) {
+if (process.argv.includes('--quifox-workflow-child')) {
+    const path = argument('--quifox-workflow-child')
+    if (!path) throw new Error('Missing workflow cell path.')
+    await workflowChild(path)
+} else if (process.argv.includes('--quifox-supervisor')) {
     const input = JSON.parse(argument('--quifox-supervisor') ?? '{}') as { command: string; cwd: string }
     if (typeof input.command !== 'string' || typeof input.cwd !== 'string') throw new Error('Invalid command supervisor arguments.')
     await commandSupervisor(input.command, input.cwd)

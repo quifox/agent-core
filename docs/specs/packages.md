@@ -16,6 +16,10 @@ GUI 展示工具与临时能力提示归[展示插件](../../packages/agent-plug
 
 应用专属集成及其依赖属于应用宿主。宿主拥有 UI、业务授权、数据库、认证与网络配置。Formal Backend 是注入 API 的参考组合，不自动兼容任意后端。
 
+工作流与 RAGFlow 工具分别由 agent-plugin-workflow 和 agent-plugin-ragflow 拥有纯注入契约；编译器、脚本库、RAGFlow HTTP 和部署属于 shared-runtime。应用内部 workflow-engine 是固定版本 ZCode 的 Apache-2.0 派生，保留其 LICENSE/NOTICE，不作为 Core 的新依赖或对外框架顶层能力。
+
+LangChain Skill 集为 QuiFox 内建可选插件，由 shared-runtime 绑定打包文档与既有 Skills 服务；不新增框架执行包。原上游 LangGraph 技能名称保留，Skill 集与 QuiFox 工作流执行支持区分。
+
 当前 QuiFox 宿主由 [shared-runtime](../../quifox/runtime/docs/specs/architecture.md) 统一组装插件、配置、持久化、命令与事件；[TUI](../../quifox/tui/README.md) 和 [Desktop](../../quifox/desktop/docs/specs/architecture.md) 只提交相同命令与展示结果。Rust 只管理窗口和 Bun sidecar，不建立第二套 Agent 状态 owner。
 
 ## 构建边界

@@ -6,7 +6,7 @@ import { synthetic } from './synthetic.js'
 import { SessionJournal } from '../src/journal.js'
 
 it('restores a missing compaction observation from its durable state without another model request', async () => {
-    const fixture = await synthetic(input => ({ text: input.messages.at(-1)?.content.includes('当前请求用于生成会话检查点') ? 'Restored checkpoint evidence.' : 'normal' }), config => { config.compaction.compactTokens = 45_000 })
+    const fixture = await synthetic(input => ({ text: input.messages.at(-1)?.content.includes('当前请求用于生成会话检查点') ? 'Restored checkpoint evidence.' : 'normal' }), config => { config.compaction.compactTokens = 45_000; config.plugins.workflows = false; config.plugins.ragflow = false })
     try {
         const session = await fixture.runtime.command({ type: 'create' }) as SessionView
         for (let index = 0; index < 5; index += 1) { await fixture.runtime.command({ type: 'submit', sessionId: session.id, prompt: `${index} ${'x'.repeat(10_000)}` }); await fixture.runtime.waitForIdle(session.id) }
@@ -30,7 +30,7 @@ it('keeps a durable compaction committed when its subsequent observation event c
     const fixture = await synthetic(input => {
         if (input.messages.at(-1)?.content.includes('当前请求用于生成会话检查点')) { summaries += 1; return { text: 'Durable compact checkpoint.' } }
         return { text: 'normal' }
-    }, config => { config.compaction.compactTokens = 45_000 })
+    }, config => { config.compaction.compactTokens = 45_000; config.plugins.workflows = false; config.plugins.ragflow = false })
     const original = SessionJournal.prototype.append
     const spy = vi.spyOn(SessionJournal.prototype, 'append').mockImplementation(function (this: SessionJournal, id, record) {
         if (fail && record.kind === 'event' && (record.event as { type?: string }).type === 'compaction') { fail = false; return Promise.reject(new Error('Synthetic observation failure')) }

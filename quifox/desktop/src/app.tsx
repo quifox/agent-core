@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent } from 'react'
-import type { InputRoutingReceipt, ResourceView, RuntimeCommand, RuntimeSnapshot, SessionView } from '@quifox/shared-runtime'
+import type { InputRoutingReceipt, ResourceView, RuntimeCommand, RuntimeSnapshot, SessionView, WorkflowDocument } from '@quifox/shared-runtime'
+import { WorkflowProvider, WorkflowMenu, WorkflowLayout, WorkflowDock } from './workflows.js'
 import { inputSuggestions, agentRecipients } from '@quifox/shared-runtime/input-routing'
 import { defaultShortcuts } from '@quifox/shared-runtime/preferences'
 import { DesktopEngine } from './engine.js'
-import { Conversation, FileDiff, MarkdownBody } from './presentation.js'
+import { Conversation, MarkdownBody } from './presentation.js'
+import { ApprovalCards, QueuedMessages } from './conversation-controls.js'
 import { Settings } from './settings.js'
 import { Workspace, type WorkspaceHandle } from './workspace.js'
 import { nativeViews } from './native-views.js'
@@ -13,15 +15,13 @@ import { SelectMenu } from './select-menu.js'
 import { Plugins } from './plugins.js'
 import { Icon } from './icons.js'
 import { shortcutKey, shortcutLabel } from './shortcuts.js'
-import { SectionDescription, StatusMessage } from './ui.js'
-import { OperationView } from './operation-view.js'
+import { StatusMessage } from './ui.js'
 import fox from './assets/fox.svg'
 import { ThreadPrimitive } from '@assistant-ui/react'
 import { ChatRuntime } from './chat-runtime.js'
 
 export { Trace } from './presentation.js'
 const messageOf = (cause: unknown): string => cause instanceof Error ? cause.message : '操作未完成。'
-const riskDescription = { 'read-only': '读取文件或查询状态', write: '写入工作目录文件', execute: '执行命令或外部工具', 'outside-workspace': '访问工作目录外的路径' }
 type Effort = NonNullable<SessionView['reasoningEffort']>
 
 export function App({ engine }: { engine: DesktopEngine }) {
@@ -36,6 +36,7 @@ export function App({ engine }: { engine: DesktopEngine }) {
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false), [approval, setApproval] = useState<'ask' | 'allow'>()
     const [settingsCollapsed, setSettingsCollapsed] = useState(false)
     const [workspaceOpen, setWorkspaceOpen] = useState(false)
+    const [workflowDock, setWorkflowDock] = useState<string>()
     const [workspaceExpanded, setWorkspaceExpanded] = useState(false), [workspaceWidth, setWorkspaceWidth] = useState(55)
     const workspaceView = useRef<WorkspaceHandle>(null), grid = useRef<HTMLDivElement>(null)
     const [error, setError] = useState<string>(), [busy, setBusy] = useState(false), busyRef = useRef(false)
@@ -55,7 +56,7 @@ export function App({ engine }: { engine: DesktopEngine }) {
     const resourceWorkspace = view?.workspace ?? workspace
     const resources = resourceState?.workspace === resourceWorkspace ? resourceState.view : undefined
     const defaults = resources?.config ?? snapshot?.config
-    const contextReady = selected ? !!view : !!resources
+    const contextReady = panel === 'workflows' ? !!view?.workflow : selected ? !!view : !!resources
     const [resourceAttempt, setResourceAttempt] = useState(0)
     useEffect(() => {
         let active = true
@@ -113,7 +114,7 @@ export function App({ engine }: { engine: DesktopEngine }) {
     }, [selected, workspace, loadSelection])
     const select = useCallback(async (id?: string, directory?: string | null): Promise<void> => {
         const path = directory === undefined ? snapshot?.sessions.find(session => session.id === id)?.workspace ?? workspace : directory
-        navigation.navigate({ panel: 'chat', sessionId: id, workspace: path, pluginId: undefined, observationId: undefined })
+        navigation.navigate({ panel: snapshot?.sessions.find(session => session.id === id)?.workflowName ? 'workflows' : 'chat', sessionId: id, workspace: path, pluginId: undefined, observationId: undefined })
         await loadSelection(id, path)
     }, [navigation.navigate, loadSelection, snapshot?.sessions, workspace])
     const startNew = useCallback((): void => {
@@ -148,6 +149,15 @@ export function App({ engine }: { engine: DesktopEngine }) {
     }, [engine, refresh, snapshot?.config.preferences.shortcuts, startNew])
     const selectAction = useCallback((id: string): void => { void select(id).catch(cause => setError(messageOf(cause))) }, [select])
     const command = useCallback((input: RuntimeCommand): Promise<unknown> => engine.command(input), [engine])
+    const openWorkflow = useCallback((script: string): void => { setWorkflowDock(script); setWorkspaceOpen(false) }, [])
+    const workflowContext = useMemo(() => ({ command, open: openWorkflow }), [command, openWorkflow])
+    const chooseWorkflow = (document: WorkflowDocument): void => {
+        action((async () => {
+            const session = await engine.command({ type: 'create', title: document.name, workspace, modelId, workflow: { name: document.name, script: document.script } }) as SessionView
+            navigation.navigate({ panel: 'workflows', sessionId: session.id, workspace: session.workspace })
+            await loadSelection(session.id, session.workspace)
+        })())
+    }
     useEffect(() => engine.onPresentation(async (request, signal) => {
         if (/^https?:\/\//i.test(request.target)) {
             signal.throwIfAborted(); await nativeViews.external(request.target)
@@ -249,16 +259,18 @@ export function App({ engine }: { engine: DesktopEngine }) {
     const workspacePath = view?.workspace ?? workspace ?? snapshot?.config.workspace ?? ''
     const managementWorkspace = view?.workspace ?? workspace ?? resources?.workspace ?? workspacePath
     const directoryLabel = view?.workspace || workspace ? basename(view?.workspace ?? workspace!) : '默认目录 · 按日期创建'
-    const pending = view?.pendingMessages ?? [], queued = pending.filter(message => message.mode === 'queue' && message.status !== 'staged')
+    const pending = view?.pendingMessages ?? []
     const activeExecution = view?.status === 'running' || view?.backgroundTasks.some(task => task.status === 'running') || children.some(child => child.status === 'running')
     const composerAction = !draft.trim() && activeExecution ? 'stop' : !draft.trim() && view?.resumeAvailable ? 'resume' : 'send'
-    return <div className="app-shell" data-theme={theme} data-platform={/Mac/.test(navigator.platform) ? 'mac' : 'other'} style={{ '--ui-scale': uiScale, '--font-size-ui': `${view?.preferences?.fontSize ?? defaults?.preferences.fontSize ?? 18}px` } as CSSProperties}>
-        <header className="window-toolbar" aria-label="窗口工具栏" data-tauri-drag-region><div className="window-navigation"><button className="icon-button" aria-label={panel === 'settings' ? settingsCollapsed ? '展开设置导航' : '折叠设置导航' : sidebarCollapsed ? '展开会话侧栏' : '折叠会话侧栏'} aria-expanded={panel === 'settings' ? !settingsCollapsed : !sidebarCollapsed} aria-controls={panel === 'settings' ? 'settings-navigation' : 'session-sidebar'} onClick={() => panel === 'settings' ? setSettingsCollapsed(value => !value) : setSidebarCollapsed(value => !value)}><Icon name="navigation"/></button><NavigationControls navigation={navigation} disabled={busy}/></div><h1 data-tauri-drag-region>{panel === 'chat' ? view?.title ?? '新的会话' : panel === 'settings' ? '设置' : '插件'}</h1>
+    return <WorkflowProvider value={workflowContext}><div className="app-shell" data-theme={theme} data-platform={/Mac/.test(navigator.platform) ? 'mac' : 'other'} style={{ '--ui-scale': uiScale, '--font-size-ui': `${view?.preferences?.fontSize ?? defaults?.preferences.fontSize ?? 18}px` } as CSSProperties}>
+        <header className="window-toolbar" aria-label="窗口工具栏" data-tauri-drag-region><div className="window-navigation"><button className="icon-button" aria-label={panel === 'settings' ? settingsCollapsed ? '展开设置导航' : '折叠设置导航' : sidebarCollapsed ? '展开会话侧栏' : '折叠会话侧栏'} aria-expanded={panel === 'settings' ? !settingsCollapsed : !sidebarCollapsed} aria-controls={panel === 'settings' ? 'settings-navigation' : 'session-sidebar'} onClick={() => panel === 'settings' ? setSettingsCollapsed(value => !value) : setSidebarCollapsed(value => !value)}><Icon name="navigation"/></button><NavigationControls navigation={navigation} disabled={busy}/></div><h1 data-tauri-drag-region>{panel === 'workflows' ? '工作流' : panel === 'chat' ? view?.title ?? '新的会话' : panel === 'settings' ? '设置' : '插件'}</h1>
             {panel === 'chat' && <div className="window-actions">{view?.parentId && <button className="icon-button" aria-label="回到父会话" onClick={() => action(select(view.parentId))}><Icon name="agents"/></button>}<button className="icon-button" aria-label={workspaceOpen ? '切换工作区' : '打开工作区'} title={workspaceOpen ? '收起工作区' : '打开工作区'} onClick={() => { setWorkspaceOpen(value => !value); setWorkspaceExpanded(false) }} aria-pressed={workspaceOpen}><Icon name="navigation"/></button></div>}</header>
         <aside id="session-sidebar" className="sidebar" hidden={sidebarCollapsed || panel === 'settings'} aria-label="工作目录与会话">
             <button className="brand" aria-label="QuiFox" onClick={() => action(select())}><img src={fox} alt="蓝色身体、黄色耳朵的狐狸"/><span>QuiFox</span></button>
             <button className="new-session" disabled={busy} onClick={startNew}><Icon name="plus"/>新建会话 <kbd>{snapshot && shortcutLabel(snapshot.config.preferences.shortcuts.newSession)}</kbd></button>
             <button className="sidebar-link" aria-pressed={panel === 'plugins'} onClick={() => navigation.navigate({ panel: 'plugins', pluginId: undefined, observationId: undefined })}><Icon name="plugins"/>插件</button>
+            {defaults?.installedPlugins.includes('workflows') && defaults.plugins.workflows !== false && <button className="sidebar-link" aria-pressed={panel === 'workflows'} onClick={() => navigation.navigate({ panel: 'workflows', sessionId: view?.workflow ? selected : undefined })}><Icon name="agents"/>工作流</button>}
+            {panel === 'workflows' && <WorkflowMenu command={command} revision={snapshotRevision} choose={chooseWorkflow}/>}
             <div className="nav-title">历史会话</div>
             <SessionNavigation sessions={snapshot?.sessions ?? []} selected={selected} select={selectAction}/>
             <div className="sidebar-bottom"><button aria-label="打开设置" onClick={openSettings}><Icon name="settings"/>设置</button></div>
@@ -269,17 +281,17 @@ export function App({ engine }: { engine: DesktopEngine }) {
             {view?.unavailable && <div className="error-banner" role="status">{view.unavailable}</div>}
             <div className="content-grid" ref={grid} data-workspace-expanded={panel === 'chat' && workspaceExpanded && workspaceOpen}><div className="conversation-column">
                 {panel !== 'chat' && !contextReady ? <StatusMessage>正在读取工作目录配置…</StatusMessage> : panel === 'settings' && snapshot ? <Settings config={snapshot.config} view={view} workspace={managementWorkspace} collapsed={settingsCollapsed} workspaceScopeAvailable={!!view || !!workspace} save={patch => run({ type: 'config', patch })} command={command}/> : panel === 'plugins' ? <Plugins navigation={navigation} sessionId={selected} sessions={snapshot?.sessions} workspace={managementWorkspace} workspaceScopeAvailable={!!view || !!workspace} configurationRevision={snapshot?.configurationRevision} revision={snapshotRevision} command={command}/> : <>
-                        <ChatRuntime view={view} live={live} onSubmit={send} onCancel={async () => { if (view) await run({ type: 'stop', sessionId: view.id }) }}><ThreadPrimitive.Root className="chat-thread"><ThreadPrimitive.Viewport className="chat-scroll">
+                        <WorkflowLayout active={panel === 'workflows'} view={view} command={command}><ChatRuntime view={view} live={live} onSubmit={send} onCancel={async () => { if (view) await run({ type: 'stop', sessionId: view.id }) }}><ThreadPrimitive.Root className="chat-thread"><ThreadPrimitive.Viewport className="chat-scroll">
                             {!view?.messages.length && !live ? <div className="welcome"><img src={fox} alt="quifox 狐狸"/><h2>开始一项工作。</h2><div className="prompt-suggestions">{['理解这个项目的结构', '先制定一个实现计划', '审查最近的代码改动'].map(prompt => <button key={prompt} onClick={() => setDraft(prompt)}>{prompt} ↗</button>)}</div>{snapshot && !snapshot.config.model.hasApiKey && <button className="quiet" onClick={openSettings}>连接你的 Chat 模型 →</button>}</div> : <>
                                 {view && (view.totalMessages ?? view.messages.length) > view.messages.length && <button className="load-history" disabled={messageLimit >= 5000} onClick={() => { limitRef.current = Math.min(5000, messageLimit + 100); setMessageLimit(limitRef.current); action(refresh()) }}>加载较早消息 · 已显示 {view.messages.length}/{view.totalMessages}</button>}
                                 {view && <Conversation view={view} openFile={openFile} openChanges={openChanges}/>}{live && <article className="message assistant live-message">{view?.messages.filter(entry => entry.message.role !== 'tool').at(-1)?.message.role !== 'assistant' && <div className="message-label"><img src={fox} alt=""/>QuiFox <span className="stream-indicator"/></div>}<div className="message-body"><MarkdownBody content={live} openFile={openFile}/></div></article>}
                             </>}{pending.filter(message => message.mode === 'steer' || message.status === 'staged').map(message => <div className="messages" key={message.id}><article className="message user"><div className="message-body"><MarkdownBody content={message.prompt} openFile={openFile}/></div></article></div>)}
                             <ThreadPrimitive.ScrollToBottom className="jump-latest" aria-label="跳到最新消息">↓ 最新消息</ThreadPrimitive.ScrollToBottom>
                         </ThreadPrimitive.Viewport>
-                        {!!view?.approvals.length && <section className="approval-card" aria-label="工具授权">{view.approvals.map(approval => <div key={approval.id}><div className="approval-content"><h3>需要你的批准</h3><div className="operation-title">{approval.inspection?.summary ?? approval.call.name}</div><SectionDescription>{approval.inspection && riskDescription[approval.inspection.risk]}</SectionDescription>{approval.inspection?.change && <FileDiff change={approval.inspection.change} workspace={view.workspace}/>}<OperationView call={approval.call}/></div><div className="approval-actions"><button className="primary" onClick={() => action(run({ type: 'approve', sessionId: view.id, approvalId: approval.id, approved: true }))}>批准这一次</button><button onClick={() => action(run({ type: 'approve', sessionId: view.id, approvalId: approval.id, approved: false }))}>拒绝</button></div></div>)}</section>}
+                        {view && <ApprovalCards view={view} command={async input => { await run(input) }} error={cause => setError(messageOf(cause))}/>}
                         {routingReceipt && <section className="routing-receipt" aria-label="子 Agent 接纳回执" role="status">{(routingReceipt.kind === 'spawn' ? routingReceipt.agents.map(agent => ({ agent, detail: '已创建 · 待机' })) : routingReceipt.deliveries.map(delivery => ({ agent: delivery.agent, detail: delivery.status === 'queued' ? '消息已接纳' : delivery.error ?? '未接纳' }))).map((item, index) => <div key={`${item.agent.taskId}-${index}`}><button aria-label={`打开 Agent ${item.agent.name}`} onClick={() => action(select(item.agent.sessionId))}>@{item.agent.name}</button><span>{item.detail}</span><code>{item.agent.taskId}</code></div>)}{routingReceipt.kind === 'spawn' && routingReceipt.errors.map((message, index) => <StatusMessage error key={index}>{message}</StatusMessage>)}</section>}
                         <div className="composer-wrap">
-                            {!!queued.length && <section className="queued-messages" aria-label="排队消息"><div className="pending-strip" role="status">{queued.length} 条消息排队中</div>{queued.map(message => <div className="queued-message" key={message.id}><span title={message.prompt}>{message.prompt}</span><button type="button" aria-label={`引导消息：${message.prompt}`} onClick={() => action(run({ type: 'inbox', sessionId: view!.id, action: 'steer', messageId: message.id }))}>引导</button><button type="button" aria-label={`删除排队消息：${message.prompt}`} onClick={() => action(run({ type: 'inbox', sessionId: view!.id, action: 'cancel', messageId: message.id }))}><Icon name="close"/></button></div>)}</section>}
+                            {view && <QueuedMessages view={view} command={async input => { await run(input) }} error={cause => setError(messageOf(cause))}/>}
                             <div className="composer-directory">{selected ? <span aria-label="会话工作目录" title={view?.workspace}><Icon name="folder"/><span className="ellipsis">{view ? directoryLabel : '加载工作目录…'}</span></span> : <button type="button" aria-label="选择工作目录" title={workspace ?? '发送首条消息时按日期创建独立工作目录'} disabled={busy || !snapshot} onClick={() => action(chooseWorkspace())}><Icon name="folder"/><span className="ellipsis">{directoryLabel}</span><Icon name="down"/></button>}</div>
                             {!!completions.length && <div id="composer-suggestions" className="recipient-picker" role="listbox" aria-label="输入建议">{completions.map((completion, index) => <button key={completion.id} id={index === recipientChoice ? 'composer-active-suggestion' : undefined} type="button" role="option" aria-selected={index === recipientChoice} onMouseDown={event => event.preventDefault()} onClick={() => completeRecipient(index)}><span>{completion.label}</span><span className="suggestion-description">{completion.description}</span></button>)}</div>}<form className="composer" onSubmit={event => { event.preventDefault(); action(send()) }}><textarea ref={input} aria-label="给 quifox 的消息" aria-autocomplete="list" aria-controls={completions.length ? 'composer-suggestions' : undefined} aria-activedescendant={completions.length ? 'composer-active-suggestion' : undefined} placeholder="描述任务，或继续对话…" value={draft} onChange={event => setDraft(event.target.value, event.target.selectionStart)} onSelect={event => setCaret(event.currentTarget.selectionStart)} onKeyDown={event => {
                             if (event.nativeEvent.isComposing) return
@@ -292,10 +304,10 @@ export function App({ engine }: { engine: DesktopEngine }) {
                         }}/>
                             <div className="composer-actions"><div className="permission-control" data-mode={permissionMode}><Icon name="shield"/><SelectMenu label="当前会话权限" value={permissionMode} disabled={!contextReady || busy || view?.status === 'running' || !!view?.unavailable || view?.approvalMode === 'deny'} above options={[{ value: 'ask', label: '逐次询问' }, { value: 'allow', label: '完全访问' }, ...(view?.approvalMode === 'deny' ? [{ value: 'deny', label: '受限权限' }] : [])]} onChange={value => changeApproval(value as 'ask' | 'allow')}/></div><div className="model-controls"><SelectMenu label="当前会话模型" value={modelId} disabled={!contextReady || busy || view?.status === 'running' || !!view?.unavailable} above options={profiles.map(model => ({ value: model.id, label: `${model.label ?? model.id} · ${model.model ?? ''}` }))} onChange={value => changeSelection(value, 'inherit')}/>{!!efforts.length && (!selected || !!view) && <SelectMenu label="思考强度" value={effectiveEffort ?? '选择思考强度'} disabled={!contextReady || busy || view?.status === 'running' || !!view?.unavailable} above options={efforts.map(value => ({ value, label: value === 'none' ? 'none · 关闭思考' : value }))} onChange={value => changeSelection(modelId, value === inherited ? 'inherit' : value as Effort)}/>}</div>
                                 <button className="send-button" aria-label={composerAction === 'stop' ? '暂停执行' : composerAction === 'resume' ? '恢复执行' : '发送消息'} disabled={!contextReady || (composerAction === 'send' && !draft.trim()) || busy || !!view?.unavailable} type={composerAction === 'send' ? 'submit' : 'button'} onClick={() => { if (view && composerAction === 'stop') action(run({ type: 'stop', sessionId: view.id })); else if (view && composerAction === 'resume') action(run({ type: 'resume', sessionId: view.id, mode: 'replan' })) }}>{composerAction === 'stop' ? <Icon name="pause"/> : composerAction === 'resume' ? <Icon name="play"/> : '↑'}</button></div>
-                        </form></div></ThreadPrimitive.Root></ChatRuntime>
+                        </form></div></ThreadPrimitive.Root></ChatRuntime></WorkflowLayout>
                     </>}
             </div><div className="workspace-splitter" hidden={panel !== 'chat' || !workspaceOpen || workspaceExpanded} role="separator" aria-label="调整工作区宽度" aria-orientation="vertical" aria-valuenow={Math.round(workspaceWidth)} aria-valuemin={30} aria-valuemax={75} tabIndex={0} onPointerDown={resizeWorkspace} onKeyDown={event => { if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') { event.preventDefault(); setWorkspaceWidth(value => Math.max(30, Math.min(75, value + (event.key === 'ArrowLeft' ? 5 : -5)))) } }}/>
-                <aside className="workspace-pane" hidden={panel !== 'chat' || !workspaceOpen} style={{ flexBasis: `${workspaceExpanded ? 100 : workspaceWidth}%` }}><Workspace ref={workspaceView} root={workspacePath} view={view} children={children} command={command} openChild={selectAction} close={() => { setWorkspaceOpen(false); setWorkspaceExpanded(false) }} expanded={workspaceExpanded} setExpanded={setWorkspaceExpanded} visible={panel === 'chat' && workspaceOpen} theme={theme} fontSize={view?.preferences?.fontSize ?? defaults?.preferences.fontSize ?? 18}/></aside></div>
+                <aside className="workspace-pane" hidden={panel !== 'chat' || !workspaceOpen} style={{ flexBasis: `${workspaceExpanded ? 100 : workspaceWidth}%` }}><Workspace ref={workspaceView} root={workspacePath} view={view} children={children} command={command} openChild={selectAction} close={() => { setWorkspaceOpen(false); setWorkspaceExpanded(false) }} expanded={workspaceExpanded} setExpanded={setWorkspaceExpanded} visible={panel === 'chat' && workspaceOpen} theme={theme} fontSize={view?.preferences?.fontSize ?? defaults?.preferences.fontSize ?? 18}/></aside>{workflowDock && <WorkflowDock key={workflowDock} script={workflowDock} command={command} openFile={openFile} close={() => setWorkflowDock(undefined)}/>}</div>
         </main>
-    </div>
+    </div></WorkflowProvider>
 }
