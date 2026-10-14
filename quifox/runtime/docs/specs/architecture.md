@@ -10,7 +10,7 @@
 
 脚本库位于应用资料根 workflows/*.ts；保存前检查，名称限制为单层文件名，读写拒绝符号链接。已有会话固定保存其所运行脚本，更新文件不静默改变历史会话。每次工作流回合创建空上下文的内部 Agent，同一 actor 的多次 ask 复用该回合的会话；外层会话只把 user/assistant 输入输出传入 args.messages。内部 Agent 复用共享 Host 的模型、授权、工具、观察与持久化，不能递归启动工作流或子 Agent，工具权限不能超过外层。
 
-工作流插件绑定 typescript-workflows Skill，由既有 Skills catalog 自动发现；skill_load 渐进加载正文，skill_read 读取动态业务插件目录、恢复说明与模板，基础设施不重复展示。RAGFlow 插件暴露 knowledge_retrieve，可直接调用，也可通过 agent(name, {plugins:["ragflow"]}) 使用。tools 可缩小内部 Agent 的工具范围，但不能扩大父权限。检索连接在私有配置中，公开状态仅显示是否配置；脚本不接触密钥、Node 模块或 fetch。运行事件沿已有 Session journal 保存并投影节点状态；停止覆盖子进程与所有内部工具。脚本执行隔离用于本地受信工作流，不承诺 Node VM 是安全边界。
+工作流插件绑定 typescript-workflows Skill，由既有 Skills catalog 自动发现；skill_load 渐进加载正文，skill_read 读取动态业务插件目录、恢复说明与模板，基础设施不重复展示。通用 KnowledgePlugin 暴露 knowledge_retrieve，Host 注入本地 Mock 检索回调，不绑定外部后端、连接或密钥。Mock 插件默认不安装；显式安装启用后可直接调用，也可通过 agent(name, {plugins:["knowledge"]}) 使用。示例按固定中英文关键词匹配合成资料，可按 documentIds 缩小范围，资料与来源明确标记 Mock；未匹配返回空结果，不伪装真实检索质量。tools 可缩小内部 Agent 的工具范围，但不能扩大父权限。脚本不接触密钥、Node 模块或 fetch。运行事件沿已有 Session journal 保存并投影节点状态；停止覆盖子进程与所有内部工具。脚本执行隔离用于本地受信工作流，不承诺 Node VM 是安全边界。
 
 引擎检查点保存到资料根 workflow-runs，节点结果写入并 fsync 后才向脚本返回，按脚本、输入身份与原 actor 身份恢复。恢复从入口重放确定性控制流，已完成节点复用原结果；内部 Agent 接回自己的 Session。未知工具结果由既有 replan 补齐未知/打断回执，不静默重试副作用，不承诺外部 exactly-once。本地检查点不包含任意 JavaScript 堆，模板应使用稳定 args 和具名 actor；无相应业务幂等协议的写入不能靠模板宣称安全。模板包含只读检索重试与并行汇合，当前恢复与平台故障边界通过真实行为测试单独验证。
 

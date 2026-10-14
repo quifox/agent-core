@@ -16,7 +16,7 @@ GUI 展示工具与临时能力提示归[展示插件](../../packages/agent-plug
 
 应用专属集成及其依赖属于应用宿主。宿主拥有 UI、业务授权、数据库、认证与网络配置。Formal Backend 是注入 API 的参考组合，不自动兼容任意后端。
 
-工作流与 RAGFlow 工具分别由 agent-plugin-workflow 和 agent-plugin-ragflow 拥有纯注入契约；编译器、脚本库、RAGFlow HTTP 和部署属于 shared-runtime。应用内部 workflow-engine 是固定版本 ZCode 的 Apache-2.0 派生，保留其 LICENSE/NOTICE，不作为 Core 的新依赖或对外框架顶层能力。
+工作流与通用知识检索工具分别由 agent-plugin-workflow 和 agent-plugin-knowledge 拥有纯注入契约；编译器、脚本库、Mock 检索示例和部署属于 shared-runtime。知识检索接口不绑定具体服务、连接或认证；当前应用仅提供可选的本地合成资料示例。应用内部 workflow-engine 是固定版本 ZCode 的 Apache-2.0 派生，保留其 LICENSE/NOTICE，不作为 Core 的新依赖或对外框架顶层能力。
 
 LangChain Skill 集为 QuiFox 内建可选插件，由 shared-runtime 绑定打包文档与既有 Skills 服务；不新增框架执行包。原上游 LangGraph 技能名称保留，Skill 集与 QuiFox 工作流执行支持区分。
 

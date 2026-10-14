@@ -4,18 +4,18 @@ import { z } from 'zod'
 export interface KnowledgeChunk { content: string; document: string; documentId?: string; score?: number }
 export interface RetrievalInput { question: string; documentIds?: string[] | undefined }
 export const retrievalDocumentation = {
-    id: 'ragflow', name: 'RAGFlow knowledge retrieval',
-    description: 'Search the Host-configured datasets. Never invent evidence; cite document names. Empty results mean no matches, while a failed connection is an error.',
+    id: 'knowledge', name: 'Knowledge retrieval',
+    description: 'Retrieve evidence through the Host-injected knowledge interface. Cite source document names, do not invent evidence, and preserve source limitations. Empty results mean no matches; callback failure is an error.',
     tools: [{ name: 'knowledge_retrieve', input: '{question: string, documentIds?: string[]}', output: '{chunks: [{content, document, documentId?, score?}]}' }],
-    example: 'agent("Research", {plugins: ["ragflow"]}).ask("Retrieve evidence for the user question using knowledge_retrieve; return relevant evidence and document citations.")'
+    example: 'agent("Research", {plugins: ["knowledge"]}).ask("Use knowledge_retrieve to find relevant evidence and cite source document names.")'
 }
 
-/** The Host owns authentication and retrieval transport; Agents receive only evidence. */
-export class RagFlowPlugin implements AgentPlugin {
-    readonly id = 'ragflow'
+/** Inject retrieval at the Host boundary without coupling the tool to a service. */
+export class KnowledgePlugin implements AgentPlugin {
+    readonly id = 'knowledge'
     readonly hooks: AgentHooks
-    constructor(retrieve: (input: RetrievalInput, ctx: AgentContext) => Promise<KnowledgeChunk[]>) {
-        const tool = defineTool({ name: 'knowledge_retrieve', description: 'Retrieve evidence from the configured RAGFlow knowledge datasets. Use for any knowledge question, including follow-up questions and comparisons. question is a self-contained search query; optional documentIds narrow the search. Returns text with source document names, IDs and scores; no matches is distinct from a connection error. The plugin-bound typescript-workflows Skill explains how to add RAGFlow to workflow Agents.',
+    constructor(retrieve: (input: RetrievalInput, ctx: AgentContext) => Promise<KnowledgeChunk[]>, description = retrievalDocumentation.description) {
+        const tool = defineTool({ name: 'knowledge_retrieve', description: description + ' question is a self-contained search query; optional documentIds narrow the search. Returns text with source names and optional document IDs/scores.',
             inputSchema: z.object({ question: z.string().trim().min(1).max(8000), documentIds: z.array(z.string().min(1)).max(100).optional() }).strict(),
             policy: { sideEffect: 'none', approval: 'none', retrySafe: true }, execute: async (input, ctx) => {
                 const chunks = await retrieve(input, ctx)

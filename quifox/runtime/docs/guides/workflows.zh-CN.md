@@ -10,7 +10,9 @@
 
 [编写 Skill](../../skills/typescript-workflows/SKILL.md) 包含通用知识检索示例。并行模板改写追问、同时检索直接证据与冲突证据，再按来源回答，不固定考试、年份或知识库。每个工作流回合新建内部 Agent；同一回合复用变量保留其上下文。args.messages 只传入外层用户与助手输入输出。
 
-RAGFlow 使用原生[检索 API](https://ragflow.io/docs/http_api_reference)。在私有全局配置加入 ragflow.baseUrl、ragflow.apiKey 和 ragflow.datasetIds，格式见英文指南。启用插件后既可直接调用 knowledge_retrieve，也可用 agent("Research", {plugins:["ragflow"], tools:["knowledge_retrieve"]}) 装配。模型不能扩大 Host 绑定的数据集；配置缺失、服务失败与零结果分别处理。
+检索示例使用本地 Mock，不连接知识服务。在插件市场安装**知识检索示例（Mock）**，它默认不安装。Agent 既可直接调用 knowledge_retrieve，也可用 agent("Research", {plugins:["knowledge"], tools:["knowledge_retrieve"]}) 装配。可测试“并行工作流如何保留独立上下文？”。Mock 用固定中英文关键词匹配几份工作流、并行研究与会话历史的合成资料，来源名称均带 [Mock]；可用 documentIds 缩小范围，无匹配返回空结果。不配置检索地址、密钥，不发起外部 HTTP 请求，不使用真实数据集；模型和权限仍使用正常 QuiFox 设置。
+
+独立 KnowledgePlugin 接收 Host 注入的检索回调，返回 content、document 和可选 documentId/score，不绑定检索后端。Mock 运行只验证插件与工作流集成，不证明真实检索质量；回答需要明确标记模拟证据。
 
 Host 在私有 workflow-runs 目录 fsync 检查点。中断后回到原会话恢复：从入口重放脚本，复用完成节点结果，内部 Agent 接回原 Session。详见[恢复合同](../../skills/typescript-workflows/recovery.md)。需要确定性控制流；任意 JS 堆不持久化，未知工具回执明确标记，不自动重做副作用。业务写入的 exactly-once 需要插件实现幂等键与对账。模板展示只读重试和并行汇合，不保证生产就绪。
 

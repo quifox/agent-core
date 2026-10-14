@@ -1,36 +1,23 @@
-import { z } from 'zod'
-import type { KnowledgeChunk, RetrievalInput } from '@quifox/agent-plugin-ragflow'
-import type { RuntimeConfig } from './config.js'
+import { retrievalDocumentation, type KnowledgeChunk, type RetrievalInput } from '@quifox/agent-plugin-knowledge'
 
-const responseSchema = z.object({ code: z.number(), data: z.object({ chunks: z.array(z.object({
-    content: z.string(), document_keyword: z.string().optional(), document_name: z.string().optional(),
-    document_id: z.string().optional(), similarity: z.number().optional()
-}).passthrough()) }).optional() }).passthrough()
+export const mockRetrievalDocumentation = { ...retrievalDocumentation, name: 'Mock knowledge retrieval',
+    description: 'QuiFox supplies local synthetic workflow, parallel research and conversation-history documents. Every source is marked Mock. This demo does not connect to a knowledge service or answer unrelated real-world questions. Cite sources and explicitly identify mock evidence; empty results mean no matches.',
+    example: 'agent("Research", {plugins: ["knowledge"]}).ask("Use knowledge_retrieve to demonstrate parallel workflow retrieval. Identify synthetic evidence and cite Mock source names.")' }
 
-/** Native RAGFlow retrieval API. Dataset boundaries come from private Host configuration. */
-export async function retrieveKnowledge(connection: RuntimeConfig['ragflow'], input: RetrievalInput, signal?: AbortSignal): Promise<KnowledgeChunk[]> {
-    if (!connection) throw new Error('请先在全局配置中设置 RAGFlow 连接与 datasetIds。')
-    const response = await fetch(new URL('api/v1/retrieval', connection.baseUrl.replace(/\/?$/, '/')), {
-        method: 'POST', redirect: 'error', signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(30_000)]) : AbortSignal.timeout(30_000),
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${connection.apiKey}` },
-        body: JSON.stringify({ question: input.question, dataset_ids: connection.datasetIds, ...(input.documentIds ? { document_ids: input.documentIds } : {}), page: 1, page_size: 8, top_k: 64 })
-    })
-    if (!response.ok) throw new Error(`知识检索服务返回 HTTP ${response.status}。`)
-    if (!response.body) throw new Error('知识检索服务没有返回正文。')
-    const reader = response.body.getReader(), chunks: Uint8Array[] = []
-    let bytes = 0
-    try {
-        for (;;) {
-            const chunk = await reader.read()
-            if (chunk.done) break
-            bytes += chunk.value.length
-            if (bytes > 2_000_000) { await reader.cancel(); throw new Error('知识检索响应超过读取预算。') }
-            chunks.push(chunk.value)
-        }
-    } finally { reader.releaseLock() }
-    const text = Buffer.concat(chunks).toString('utf8')
-    const value = responseSchema.parse(JSON.parse(text))
-    if (value.code !== 0 || !value.data) throw new Error('知识检索服务未完成查询。')
-    return value.data.chunks.map(chunk => ({ content: chunk.content, document: chunk.document_keyword ?? chunk.document_name ?? '未命名文档',
-        ...(chunk.document_id ? { documentId: chunk.document_id } : {}), ...(chunk.similarity === undefined ? {} : { score: chunk.similarity }) }))
+const documents = [
+    { documentId: 'mock-workflow', document: '[Mock] Workflow notes', keywords: ['workflow', '工作流'],
+        content: 'Synthetic example: a workflow can rewrite a question, collect evidence and compose an answer. This is mock evidence for integration tests, not a real knowledge source.' },
+    { documentId: 'mock-parallel', document: '[Mock] Parallel research', keywords: ['parallel', '并行'],
+        content: 'Synthetic example: two research branches keep independent Agent context, then combine their returned evidence. This is mock evidence, not a measured retrieval result.' },
+    { documentId: 'mock-history', document: '[Mock] Conversation history', keywords: ['history', 'context', 'conversation', '历史', '上下文', '多轮'],
+        content: 'Synthetic example: a follow-up question can use outer user and assistant messages while internal research traces stay local to that turn. This is mock evidence.' }
+] as const
+
+/** A local, deterministic example of the injected retrieval boundary; no network or credentials. */
+export async function mockRetrieveKnowledge(input: RetrievalInput, signal?: AbortSignal): Promise<KnowledgeChunk[]> {
+    signal?.throwIfAborted()
+    const question = input.question.normalize('NFKC').toLowerCase()
+    return documents.filter(document => (!input.documentIds || input.documentIds.includes(document.documentId))
+        && document.keywords.some(keyword => question.includes(keyword)))
+        .map(({ content, document, documentId }) => ({ content, document, documentId }))
 }

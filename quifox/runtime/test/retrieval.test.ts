@@ -1,42 +1,38 @@
 import { expect, it } from 'vitest'
-import { createServer } from 'node:http'
-import { once } from 'node:events'
-import { retrieveKnowledge } from '../src/retrieval.js'
-import { defaultConfig, publicConfig, workspaceConfig } from '../src/config.js'
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
-import { tmpdir } from 'node:os'
+import { mockRetrieveKnowledge } from '../src/retrieval.js'
+import { defaultConfig } from '../src/config.js'
+import { synthetic } from './synthetic.js'
+import type { SessionView } from '../src/protocol.js'
 
-it('uses the native HTTP API and configured dataset boundary while returning evidence without credentials', async () => {
-    let payload: unknown, authorization: string | undefined, path: string | undefined
-    const server = createServer(async (request, response) => {
-        const chunks: Buffer[] = []; for await (const chunk of request) chunks.push(chunk as Buffer)
-        payload = JSON.parse(Buffer.concat(chunks).toString('utf8')); authorization = request.headers.authorization; path = request.url
-        response.setHeader('Content-Type', 'application/json'); response.end(JSON.stringify({ code: 0, data: { chunks: [{ content: '中文证据', document_keyword: 'Guide', document_id: 'doc', similarity: .8 }] } }))
-    })
-    server.listen(0, '127.0.0.1'); await once(server, 'listening')
-    try {
-        const connection = { baseUrl: 'http://127.0.0.1:' + (server.address() as { port: number }).port, apiKey: 'synthetic-retrieval-key', datasetIds: ['authorized'] }
-        const result = await retrieveKnowledge(connection, { question: '通用问题', documentIds: ['doc'] })
-        expect(path).toBe('/api/v1/retrieval'); expect(authorization).toBe('Bearer synthetic-retrieval-key')
-        expect(payload).toMatchObject({ question: '通用问题', dataset_ids: ['authorized'], document_ids: ['doc'] })
-        expect(result).toEqual([{ content: '中文证据', document: 'Guide', documentId: 'doc', score: .8 }])
-        const config = defaultConfig('/synthetic'); config.ragflow = connection
-        expect(JSON.stringify(publicConfig(config))).not.toContain('synthetic-retrieval-key')
-    } finally { server.closeAllConnections(); server.close() }
+it('returns clearly marked local mock evidence and narrows the synthetic document scope', async () => {
+    const results = await mockRetrieveKnowledge({ question: 'parallel workflow', documentIds: ['mock-parallel'] })
+    expect(results).toHaveLength(1)
+    expect(results[0]).toMatchObject({ document: '[Mock] Parallel research', documentId: 'mock-parallel' })
+    expect(results[0]?.content).toContain('Synthetic example')
+    expect(await mockRetrieveKnowledge({ question: 'parallel workflow', documentIds: ['unknown'] })).toEqual([])
+    expect(await mockRetrieveKnowledge({ question: 'unrelated question' })).toEqual([])
+    expect(defaultConfig('/synthetic').installedPlugins).not.toContain('knowledge')
 })
-it('rejects oversized streaming responses before reading the complete body', async () => {
-    const server = createServer((_request, response) => { response.writeHead(200); response.end('x'.repeat(2_100_000)) })
-    server.listen(0, '127.0.0.1'); await once(server, 'listening')
-    try {
-        await expect(retrieveKnowledge({ baseUrl: 'http://127.0.0.1:' + (server.address() as { port: number }).port, apiKey: 'synthetic', datasetIds: ['dataset'] }, { question: 'question' })).rejects.toThrow('读取预算')
-    } finally { server.closeAllConnections(); server.close() }
+it('respects cancellation without opening a retrieval connection', async () => {
+    const controller = new AbortController(); controller.abort(new Error('mock cancelled'))
+    await expect(mockRetrieveKnowledge({ question: 'workflow' }, controller.signal)).rejects.toThrow('mock cancelled')
 })
-it('rejects project-controlled retrieval URLs and dataset scopes', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'quifox-rag-trust-'))
+it('lets a workflow Agent invoke the mock interface through the normal tool loop', async () => {
+    const fixture = await synthetic((_request, index) => index === 1
+        ? { calls: [{ id: 'retrieval', name: 'knowledge_retrieve', input: { question: 'parallel workflow', documentIds: ['mock-parallel'] } }] }
+        : { text: '**Mock answer** based on synthetic evidence.' })
     try {
-        await mkdir(join(root, '.quifox'))
-        await writeFile(join(root, '.quifox', 'config.json'), JSON.stringify({ ragflow: { baseUrl: 'https://untrusted.invalid/', apiKey: 'synthetic', datasetIds: ['other'] } }))
-        await expect(workspaceConfig(defaultConfig(root), root, join(root, 'profile'))).rejects.toThrow('项目配置无效')
-    } finally { await rm(root, { recursive: true, force: true }) }
-})
+        await fixture.runtime.command({ type: 'plugin-install', pluginId: 'knowledge', action: 'install', scope: 'global' })
+        const script = 'return await agent("Research", {plugins:["knowledge"], tools:["knowledge_retrieve"]}).ask(String(args.question));'
+        const session = await fixture.runtime.command({ type: 'create', workflow: { name: 'mock-example', script } }) as SessionView
+        await fixture.runtime.command({ type: 'submit', sessionId: session.id, prompt: 'parallel workflow' }); await fixture.runtime.waitForIdle(session.id)
+        expect((await fixture.runtime.command({ type: 'snapshot', sessionId: session.id }) as SessionView).messages.at(-1)?.message.content).toContain('Mock answer')
+        expect(fixture.requests[0]?.tools.map(tool => tool.function.name)).toEqual(['knowledge_retrieve'])
+        expect(JSON.stringify(fixture.requests[0]?.tools)).toContain('Mock')
+        expect(fixture.requests[1]?.messages.find(message => message.role === 'tool')?.content).toContain('[Mock] Parallel research')
+        await fixture.runtime.command({ type: 'plugin-set-enabled', pluginId: 'knowledge', scope: 'global', enabled: false })
+        const other = await fixture.runtime.command({ type: 'create' }) as SessionView
+        await fixture.runtime.command({ type: 'submit', sessionId: other.id, prompt: 'without mock' }); await fixture.runtime.waitForIdle(other.id)
+        expect(fixture.requests.at(-1)?.tools.map(tool => tool.function.name)).not.toContain('knowledge_retrieve')
+    } finally { await fixture.close() }
+}, 15000)

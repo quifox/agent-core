@@ -98,8 +98,9 @@ return await answer(await identify());`
 
 it('saves and reloads scripts, uses real Host Agents and keeps only outer I/O across workflow turns', async () => {
     const fixture = await synthetic(() => ({ text: '**evidence-based answer**' }))
-    const script = '/** @phase Retrieval */\nasync function retrieve(){ return await agent("Research", {plugins:["ragflow"]}).ask<string>(JSON.stringify(args)); }\nreturn await retrieve();'
+    const script = '/** @phase Retrieval */\nasync function retrieve(){ return await agent("Research", {plugins:["knowledge"]}).ask<string>(JSON.stringify(args)); }\nreturn await retrieve();'
     try {
+        await fixture.runtime.command({ type: 'plugin-install', pluginId: 'knowledge', action: 'install', scope: 'global' })
         await fixture.runtime.command({ type: 'workflows', action: 'save', name: 'knowledge', script })
         expect(await fixture.runtime.command({ type: 'workflows', action: 'list' })).toEqual([{ name: 'knowledge' }])
         const session = await fixture.runtime.command({ type: 'create', workflow: { name: 'knowledge', script } }) as SessionView

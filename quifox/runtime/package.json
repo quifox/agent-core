@@ -20,7 +20,7 @@
     "@quifox/agent-plugin-project-context": "workspace:*", "@quifox/agent-plugin-subagents": "workspace:*", "@quifox/agent-plugin-tasks": "workspace:*",
     "@quifox/agent-plugin-mcp": "workspace:*", "@quifox/agent-plugin-events": "workspace:*", "@quifox/agent-plugin-observability": "workspace:*", "@quifox/agent-plugin-composition": "workspace:*", "@quifox/agent-plugin-presentation": "workspace:*",
     "@modelcontextprotocol/sdk": "1.32.1", "zod": "4.4.3", "proper-lockfile": "4.1.2", "yaml": "2.9.1",
-    "@quifox/workflow-engine": "workspace:*", "@quifox/agent-plugin-workflow": "workspace:*", "@quifox/agent-plugin-ragflow": "workspace:*", "typescript": "5.9.3"
+    "@quifox/workflow-engine": "workspace:*", "@quifox/agent-plugin-workflow": "workspace:*", "@quifox/agent-plugin-knowledge": "workspace:*", "typescript": "5.9.3"
   },
   "devDependencies": { "@types/node": "22.19.19", "@types/proper-lockfile": "4.1.4", "typescript": "5.9.3", "vitest": "4.1.11" }
 }

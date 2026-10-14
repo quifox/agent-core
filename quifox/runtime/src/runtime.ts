@@ -12,12 +12,12 @@ import { EventPublisherPlugin } from '@quifox/agent-plugin-events'
 import { ObservabilityPlugin, compareObservabilityRuns, foldObservability, type ObservabilityComposition, type ObservabilityEvent } from '@quifox/agent-plugin-observability'
 import { ChatModelPlugin } from '@quifox/agent-plugin-model'
 import { WorkflowModelPlugin, WorkflowToolsPlugin } from '@quifox/agent-plugin-workflow'
-import { RagFlowPlugin, retrievalDocumentation } from '@quifox/agent-plugin-ragflow'
+import { KnowledgePlugin } from '@quifox/agent-plugin-knowledge'
 import type { PersonaSpec, AskMessage } from '@quifox/workflow-engine'
 import { workflowRunsDir } from '@quifox/workflow-engine/runtime'
 import { inspectWorkflow, runWorkflow } from './workflow.js'
 import { WorkflowLibrary } from './workflow-library.js'
-import { retrieveKnowledge } from './retrieval.js'
+import { mockRetrieveKnowledge, mockRetrievalDocumentation } from './retrieval.js'
 import { workflowSkillFiles, workflowSkillRoot, workflowResources } from './workflow-skills.js'
 import { workflowJournal } from './workflow-journal.js'
 import { WorkflowApi, type WorkflowDeployment } from './workflow-api.js'
@@ -939,12 +939,12 @@ export class QuiFoxRuntime {
                 if (!call) throw new Error('工作流调用缺少执行身份。')
                 return this.executeWorkflow(entry, source.script ?? (await new WorkflowLibrary(this.paths.root).read(source.name!)).script, input, this.operationId(entry, call.id))
             } })
-        const ragflow = new RagFlowPlugin(input => retrieveKnowledge(entry.config.ragflow, input, this.signal(entry))) as AgentPlugin<ChatInput>
+        const knowledge = new KnowledgePlugin(input => mockRetrieveKnowledge(input, this.signal(entry)), mockRetrievalDocumentation.description) as AgentPlugin<ChatInput>
         const candidates = [preparation, entry.interrupt as AgentPlugin<ChatInput>, privateResults, entry.permissions, entry.checkpoint,
             ...!entry.metadata.workflowActor ? [{ id: 'langchain' } as AgentPlugin<ChatInput>] : [],
             entry.conversation, entry.inbox, entry.skills, entry.guidance, memory, new CompactionPlugin(), entry.tasks as AgentPlugin<ChatInput>,
             nativeTools({ workspace: entry.metadata.workspace, signal: () => this.signal(entry), tasks: entry.tasks, backgroundEnabled: pluginEnabled(config, 'background-tasks') }) as AgentPlugin<ChatInput>, entry.subagents, ...this.mcpPlugins(entry, { ...config, mcp: config.mcp.filter(server => !entry.metadata.workflowActor || entry.metadata.workflowPlugins?.includes('mcp:' + server.id)) }, clients),
-            ...presentation ? [presentation] : [], ...entry.metadata.workflowActor ? [] : [workflows as AgentPlugin<ChatInput>], ...!entry.metadata.workflowActor || entry.metadata.workflowPlugins?.includes('ragflow') ? [ragflow] : [], agentConfiguration, toolInterruption(() => this.signal(entry)), durability, entry.permissions.guard, ...workflow ? [workflow] : [], new EventPublisherPlugin<ChatInput>({ sourceId: entry.metadata.id }), entry.observability]
+            ...presentation ? [presentation] : [], ...entry.metadata.workflowActor ? [] : [workflows as AgentPlugin<ChatInput>], ...!entry.metadata.workflowActor || entry.metadata.workflowPlugins?.includes('knowledge') ? [knowledge] : [], agentConfiguration, toolInterruption(() => this.signal(entry)), durability, entry.permissions.guard, ...workflow ? [workflow] : [], new EventPublisherPlugin<ChatInput>({ sourceId: entry.metadata.id }), entry.observability]
         entry.plugins = new PluginActivationPlugin<ChatInput>().select(candidates.map(plugin => Object.assign(plugin, { enabled: pluginEnabled(config, plugin.id) })))
         entry.agent = createAgent<ChatInput>({ plugins: entry.plugins })
         return entry
@@ -958,7 +958,7 @@ export class QuiFoxRuntime {
 
     private workflowDocuments(config: RuntimeConfig) {
         return { api: 'TypeScript globals: args, agent(name?, {system?, model?, plugins?}).ask<T>(instructions), phase(label), log(message), Promise.all. Every new actor starts empty. Reuse its variable for shared context in this turn. args.question is the current user input; args.messages is outer user/assistant history. Label every named function or method with JSDoc @node Label or @phase Label. The graph shows resolved calls and actual runtime invocations. Return Markdown. No imports, fetch, Node or filesystem in scripts; use Agent tools. Validate with workflow_inspect, save with workflow_save, run with workflow_run. Render a script with a dynamic-workflow fenced block.',
-            plugins: [...pluginEnabled(config, 'ragflow') ? [{ ...retrievalDocumentation, configured: !!config.ragflow }] : [],
+            plugins: [...pluginEnabled(config, 'knowledge') ? [mockRetrievalDocumentation] : [],
                 ...config.mcp.filter(server => server.enabled).map(server => ({ id: 'mcp:' + server.id, description: 'MCP tools registered by the Host; use the actual tool schemas available to the Agent.' }))] }
     }
 
@@ -988,7 +988,7 @@ export class QuiFoxRuntime {
                     signal.throwIfAborted()
                     let actor = actors.get(actorId)
                     if (!actor) {
-                        for (const id of persona.plugins ?? []) if (!(id === 'ragflow' || id.startsWith('mcp:')) || !pluginEnabled(entry.config, id)) throw new Error('工作流追加插件不存在或未启用。')
+                        for (const id of persona.plugins ?? []) if (!(id === 'knowledge' || id.startsWith('mcp:')) || !pluginEnabled(entry.config, id)) throw new Error('工作流追加插件不存在或未启用。')
                         const now = new Date().toISOString(), hash = createHash('sha256').update(actorId).digest('hex')
                         const id = hash.slice(0, 8) + '-' + hash.slice(8, 12) + '-4' + hash.slice(13, 16) + '-a' + hash.slice(17, 20) + '-' + hash.slice(20, 32)
                         const metadata: SessionMetadata = { id, ownerId: entry.metadata.ownerId, title: persona.name ?? 'Workflow Agent', name: persona.name?.replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 40) || 'worker',
@@ -1605,7 +1605,7 @@ export class QuiFoxRuntime {
     }
 
     private redact<T>(value: T, ...configurations: RuntimeConfig[]): T {
-        const secrets = [this.config, ...configurations, ...[...this.entries.values()].map(entry => entry.config)].flatMap(config => [config.model.apiKey, config.ragflow?.apiKey, ...config.models.map(model => model.apiKey),
+        const secrets = [this.config, ...configurations, ...[...this.entries.values()].map(entry => entry.config)].flatMap(config => [config.model.apiKey, ...config.models.map(model => model.apiKey),
             ...config.mcp.flatMap(server => [...Object.values(server.env ?? {}), ...Object.values(server.headers ?? {})]),
             ...[config.model.baseUrl, ...config.models.map(model => model.baseUrl), ...config.mcp.map(server => server.url)].filter((url): url is string => !!url && !!(new URL(url).search || new URL(url).password))])
             .filter((item): item is string => !!item)

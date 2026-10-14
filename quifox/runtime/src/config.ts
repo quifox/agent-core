@@ -29,10 +29,9 @@ const configurationShape = z.object({
     preferences: z.object({ inputMode: z.enum(['queue', 'steer']).default('queue'), theme: z.enum(['system', 'light', 'dark']).default('system'),
         fontSize: z.number().int().min(14).max(22).default(18), shortcuts: shortcuts.default(defaultShortcuts),
         uiScale: z.number().min(.8).max(1.4).default(1), reasoningEffort: reasoningEffortSchema.optional() }).default({ inputMode: 'queue', theme: 'system', uiScale: 1, fontSize: 18, shortcuts: defaultShortcuts }),
-    installedPlugins: z.array(z.string().refine(value => builtinPlugins.some(plugin => plugin.id === value), 'Unknown bundled plugin.')).refine(value => new Set(value).size === value.length, 'Installed plugins must be unique.').default(builtinPlugins.filter(plugin => plugin.id !== 'langchain').map(plugin => plugin.id)),
+    installedPlugins: z.array(z.string().refine(value => builtinPlugins.some(plugin => plugin.id === value), 'Unknown bundled plugin.')).refine(value => new Set(value).size === value.length, 'Installed plugins must be unique.').default(builtinPlugins.filter(plugin => !['langchain', 'knowledge'].includes(plugin.id)).map(plugin => plugin.id)),
     plugins: z.object({ skills: z.boolean().optional(), memory: z.boolean().optional(), 'project-guidance': z.boolean().optional(), 'chat-compaction': z.boolean().optional(),
-        'background-tasks': z.boolean().optional(), 'host-native-tools': z.boolean().optional(), subagents: z.boolean().optional(), presentation: z.boolean().optional(), observability: z.boolean().optional(), workflows: z.boolean().optional(), ragflow: z.boolean().optional(), langchain: z.boolean().optional() }).strict().default({}),
-    ragflow: z.object({ baseUrl: url, apiKey: z.string().min(1), datasetIds: z.array(z.string().min(1)).min(1).max(100) }).strict().optional(),
+        'background-tasks': z.boolean().optional(), 'host-native-tools': z.boolean().optional(), subagents: z.boolean().optional(), presentation: z.boolean().optional(), observability: z.boolean().optional(), workflows: z.boolean().optional(), knowledge: z.boolean().optional(), langchain: z.boolean().optional() }).strict().default({}),
     trustedProjects: z.array(z.string().min(1)).default([]),
     compaction: z.object({ context: positive.optional(), compactTokens: positive.optional(), safetyTokens: z.number().int().nonnegative().default(10_240) }).strict(),
     memory: z.object({ enabled: z.boolean(), generate: z.boolean(), extractionFormat: z.enum(['json-schema', 'json-object', 'text']),
@@ -108,8 +107,7 @@ export function publicConfig(config: RuntimeConfig, catalog: unknown = {}) {
             ...(metadata.source ? { reasoningSource: metadata.source } : {}) }
     }
     const { apiKey: _apiKey, ...model } = config.model
-    const { ragflow, ...configuration } = config
-    return { ...configuration, ...(ragflow ? { ragflow: { configured: true, datasetCount: ragflow.datasetIds.length } } : {}), model: { ...model, ...capabilities(model), baseUrl: publicUrl(model.baseUrl), providerOptions: undefined, hasApiKey: !!config.model.apiKey },
+    return { ...config, model: { ...model, ...capabilities(model), baseUrl: publicUrl(model.baseUrl), providerOptions: undefined, hasApiKey: !!config.model.apiKey },
         models: config.models.map(({ apiKey, providerOptions: _options, ...profile }) => ({ ...profile, ...capabilities(profile), baseUrl: publicUrl(profile.baseUrl), hasApiKey: !!apiKey })),
         mcp: config.mcp.map(({ env, headers, args, url, ...server }) => ({ ...server, ...(url ? { url: publicUrl(url) } : {}), argCount: args.length,
             envKeys: Object.keys(env ?? {}), headerNames: Object.keys(headers ?? {}) })) }
@@ -203,7 +201,6 @@ export async function workspaceConfig(base: RuntimeConfig, workspace: string, ap
             if (resolve(path) === standardGlobalFile || canonical === standardGlobalPath || canonical === globalPath) continue
             const patch = z.record(z.string(), z.unknown()).parse(proposed ? candidate.value : JSON.parse(await readFile(path, 'utf8')))
             if ('trustedProjects' in patch) throw new Error('Project configuration cannot grant its own trust.')
-            if ('ragflow' in patch) throw new Error('RAGFlow connections and dataset scopes belong to global configuration.')
             const previous = config
             config = mergeConfig(config, patch, true)
             for (const server of patch.mcp as Record<string, unknown>[] ?? []) if (Object.keys(server).some(key => key !== 'id' && key !== 'enabled')) projectMcp.add(server.id as string)

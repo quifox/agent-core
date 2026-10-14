@@ -10,13 +10,9 @@ In a conversation, a dynamic-workflow fenced code block becomes a graph card. Ru
 
 For general knowledge retrieval, use the [authoring Skill](../../skills/typescript-workflows/SKILL.md). The parallel-retrieval template rewrites a follow-up question, retrieves direct and conflicting evidence in parallel, and synthesizes an answer with sources. It is not tied to a specific exam, year or dataset. Internal Agents start empty per workflow turn; reuse an actor variable for context inside that turn. args.messages supplies only outer user/assistant I/O.
 
-RAGFlow uses its native [retrieval API](https://ragflow.io/docs/http_api_reference). Add a private global configuration section:
+The retrieval example is a local Mock, not a connection to a knowledge service. Install **知识检索示例（Mock）** from the plugin marketplace; it is not installed by default. An Agent can call knowledge_retrieve directly or a script can create agent("Research", {plugins:["knowledge"], tools:["knowledge_retrieve"]}). Try "How do parallel workflow branches keep independent context?". The Mock matches fixed English/Chinese keywords against synthetic workflow, parallel research and conversation-history notes, whose source names begin with [Mock]. Optional documentIds narrow the results. An unrelated query returns no matches. No retrieval URL, API key, external HTTP request or real dataset is involved; model profiles and permissions still use normal QuiFox settings.
 
-```json
-{"ragflow":{"baseUrl":"https://knowledge.example.invalid/","apiKey":"YOUR_KEY","datasetIds":["YOUR_DATASET_ID"]}}
-```
-
-Enable the RAGFlow plugin. An Agent can call knowledge_retrieve directly or a script can create agent("Research", {plugins:["ragflow"], tools:["knowledge_retrieve"]}). Host-defined datasets cannot be widened by the model. Missing configuration, failed retrieval and zero results are distinct. Model profiles and permissions use the normal QuiFox settings.
+The separate KnowledgePlugin accepts a Host-injected retrieval callback returning content, document and optional documentId/score. This interface is independent of any retrieval backend. Mock execution verifies plugin and workflow integration, not real retrieval quality; identify mock evidence explicitly in answers.
 
 The Host fsyncs workflow checkpoints in its private workflow-runs directory. Resume the original conversation after interruption: the script replays from its entry, completed nodes reuse results, and live actors reattach to their original Session. Read the [recovery contract](../../skills/typescript-workflows/recovery.md) before designing side effects. Deterministic control flow is required; arbitrary JavaScript heap state is not persisted. Unknown interrupted tool results are explicitly marked incomplete/unknown rather than automatically replayed. Exactly-once business writes require plugin-owned idempotency and reconciliation. Templates show read-only retry and parallel joins; they do not establish production readiness.
 

@@ -146,6 +146,18 @@
         "zod": "4.4.3",
       },
     },
+    "packages/agent-plugin-knowledge": {
+      "name": "@quifox/agent-plugin-knowledge",
+      "version": "0.1.0",
+      "dependencies": {
+        "@quifox/agent-core": "workspace:*",
+        "zod": "4.4.3",
+      },
+      "devDependencies": {
+        "typescript": "5.9.3",
+        "vitest": "4.1.11",
+      },
+    },
     "packages/agent-plugin-mcp": {
       "name": "@quifox/agent-plugin-mcp",
       "version": "0.1.0",
@@ -224,18 +236,6 @@
         "@quifox/agent-plugin-model": "workspace:*",
         "@quifox/agent-plugin-request-context": "workspace:*",
         "@quifox/agent-plugin-session": "workspace:*",
-        "typescript": "5.9.3",
-        "vitest": "4.1.11",
-      },
-    },
-    "packages/agent-plugin-ragflow": {
-      "name": "@quifox/agent-plugin-ragflow",
-      "version": "0.1.0",
-      "dependencies": {
-        "@quifox/agent-core": "workspace:*",
-        "zod": "4.4.3",
-      },
-      "devDependencies": {
         "typescript": "5.9.3",
         "vitest": "4.1.11",
       },
@@ -410,13 +410,13 @@
         "@quifox/agent-plugin-composition": "workspace:*",
         "@quifox/agent-plugin-events": "workspace:*",
         "@quifox/agent-plugin-interrupt": "workspace:*",
+        "@quifox/agent-plugin-knowledge": "workspace:*",
         "@quifox/agent-plugin-mcp": "workspace:*",
         "@quifox/agent-plugin-memory": "workspace:*",
         "@quifox/agent-plugin-model": "workspace:*",
         "@quifox/agent-plugin-observability": "workspace:*",
         "@quifox/agent-plugin-presentation": "workspace:*",
         "@quifox/agent-plugin-project-context": "workspace:*",
-        "@quifox/agent-plugin-ragflow": "workspace:*",
         "@quifox/agent-plugin-request-context": "workspace:*",
         "@quifox/agent-plugin-session": "workspace:*",
         "@quifox/agent-plugin-steering": "workspace:*",
@@ -646,6 +646,8 @@
 
     "@quifox/agent-plugin-interrupt": ["@quifox/agent-plugin-interrupt@workspace:packages/agent-plugin-interrupt"],
 
+    "@quifox/agent-plugin-knowledge": ["@quifox/agent-plugin-knowledge@workspace:packages/agent-plugin-knowledge"],
+
     "@quifox/agent-plugin-mcp": ["@quifox/agent-plugin-mcp@workspace:packages/agent-plugin-mcp"],
 
     "@quifox/agent-plugin-memory": ["@quifox/agent-plugin-memory@workspace:packages/agent-plugin-memory"],
@@ -657,8 +659,6 @@
     "@quifox/agent-plugin-presentation": ["@quifox/agent-plugin-presentation@workspace:packages/agent-plugin-presentation"],
 
     "@quifox/agent-plugin-project-context": ["@quifox/agent-plugin-project-context@workspace:packages/agent-plugin-project-context"],
-
-    "@quifox/agent-plugin-ragflow": ["@quifox/agent-plugin-ragflow@workspace:packages/agent-plugin-ragflow"],
 
     "@quifox/agent-plugin-request-context": ["@quifox/agent-plugin-request-context@workspace:packages/agent-plugin-request-context"],
 

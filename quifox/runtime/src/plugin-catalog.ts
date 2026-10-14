@@ -3,7 +3,7 @@ import type { RuntimeConfig } from './config.js'
 export const builtinPlugins = [
     { id: 'langchain', name: 'LangChain', description: 'LangChain 系列与工作流设计、交付检查 Skill 集；按需加载文档。' },
     { id: 'workflows', name: '工作流', description: '保存、检查和运行 TypeScript 多 Agent 工作流。', surface: { kind: 'workflows', title: '工作流' } },
-    { id: 'ragflow', name: 'RAGFlow 检索', description: '通过配置的知识库检索证据，可直接调用或追加到工作流 Agent。' },
+    { id: 'knowledge', name: '知识检索示例（Mock）', description: '本地合成资料的检索接口示例，可追加到工作流 Agent；不连接真实知识服务。' },
     { id: 'skills', name: '技能', description: '发现和加载工作目录与全局技能。' },
     { id: 'project-guidance', name: '项目指引', description: '按目录层级注入 AGENTS.md 开发约束。' },
     { id: 'memory', name: '记忆', description: '保存任务记忆与会话摘要，按需要注入下一轮上下文。' },
