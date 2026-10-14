@@ -4,6 +4,18 @@
 
 A React/Ink terminal Host with the blue fox, yellow ears and **QUIFOX** wordmark. It uses [shared-runtime](../runtime/README.md) for every Agent capability.
 
+The npm installation package is named `quifox`; it runs the same TUI on Node.js 22.12+ without a separate Bun installation. Registry publication is separate from building the package. To try the prepared artifact locally, run from the repository root:
+
+```sh
+bun run --filter @quifox/tui npm:build
+cd quifox/release/npm/quifox
+npm pack --ignore-scripts
+npm install --global ./quifox-0.1.0.tgz
+quifox
+```
+
+Run `quifox` from your project directory after installation; `--workspace` is an optional override. Published installation will use `npm install --global quifox` or `npx quifox`. The npm artifact bundles the shared Host and framework plugins, so those workspace packages do not need separate publication.
+
 After the workspace build, start from the repository root:
 
 ```sh

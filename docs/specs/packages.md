@@ -24,6 +24,8 @@ workspace 使用根 package.json 固定版本的 Bun 管理依赖与脚本；pac
 
 每个包继续由 TypeScript 编译到 dist 并生成声明；Bun 的 TS 执行不替代 strict 类型检查。分发范围以各自 package.json 的 files 字段为准。Core 与通用插件保持 ES2022 ESM，不引入 Bun/Node 专属 API 或环境 I/O；Bun 专属能力只属于 Host 或开发工具。
 
+QuiFox TUI 的 npm 安装产物名为 `quifox`，归 quifox/tui 拥有，打包相同应用入口与插件实现；不要求单独发布私有 workspace、Core 或插件包。版本取 TUI manifest，运行要求与许可证清单见共享 Host 合同；构建与正式发布独立授权。
+
 现有测试继续使用 Vitest，V8 覆盖率范围由 vitest.coverage.config.mjs 定义；两者运行在 Node.js 22.12+，由 `bun run test` / `bun run test:coverage` 调用。`bun test` 是另一套测试运行器，不作为现有测试入口。切换包管理器不同时改写测试合同或宣称所有开发工具都使用 Bun 运行时。
 
 TS 配置保持 strict、noUncheckedIndexedAccess、exactOptionalPropertyTypes 和未使用检查；ESLint 与测试 lint 由 eslint.config.mjs 和根脚本统一维护。无增量事件的 Hook 生成器、生成器/getter 的具名 owner 引用及显式 `_` 忽略值是合法合同；异步断言必须被等待或返回，禁止 focused/skipped tests 与重复测试标题。

@@ -4,6 +4,18 @@
 
 React/Ink 终端宿主，展示蓝身体、黄耳朵狐狸与 **QUIFOX**。所有 Agent 能力使用 [共享运行时](../runtime/README.zh-CN.md)。
 
+npm 安装包名为 `quifox`，通过 Node.js 22.12+ 执行同一 TUI，无须另装 Bun。构建安装包与发布到注册表是两个步骤。在仓库根目录运行以下命令，可以试用本地安装包：
+
+```sh
+bun run --filter @quifox/tui npm:build
+cd quifox/release/npm/quifox
+npm pack --ignore-scripts
+npm install --global ./quifox-0.1.0.tgz
+quifox
+```
+
+安装后从项目目录启动 `quifox`；`--workspace` 仅用于显式覆盖。正式发布后使用 `npm install --global quifox` 或 `npx quifox`。安装包已包含共享 Host 和框架插件，不要求这些 workspace 包分别发布。
+
 完成 workspace 构建后，在仓库根目录启动：
 
 ```sh

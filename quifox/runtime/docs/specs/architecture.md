@@ -18,7 +18,7 @@ resources 返回所选目录继承后的脱敏 config 投影，让无会话的�
 
 无会话的 plugins 查询只读取继承配置与安装目录，不构造 Agent，不要求模型容量或可执行连接；此时没有实际会话装配，plugins 数组为空。已存在会话的查询才返回实际插件顺序。模型容量缺失不阻止查看安装配置和历史观测；创建、执行与配置写入仍按各自合同校验候选组合。
 
-Desktop 可注入展示适配器，Host 才装配独立 PresentationPlugin；TUI 不注入。插件贡献本轮 RequestContext，不写永久系统消息；子会话按实际执行宿主重新装配。open_view 属于只读展示，支持任意目录中的文件，相对路径以会话工作目录解析；不新增目录白名单或要求创建会话。路径解析为实际文件，图片/视频只返回资源身份与路径，正文读取有界。展示请求绑定会话和 operationId，UI 确认后返回真实标签或外部目的；停止、断连、超时明确失败，未知恢复遵循 Checkpoint，不宣称请求未发生。GUI 项目读取/目录树可按用户选择目录查询。权限决定见[既有 Notes 的补充](../../../../.agents/notes/implemented/architecture/2026-10-12-plugin-set-contracts-and-cli-scope.md#2026-10-13完全访问与展示权限)。
+Desktop 可注入展示适配器，Host 才装配独立 PresentationPlugin；TUI 不注入。插件贡献本轮 RequestContext，不写永久系统消息；子会话按实际执行宿主重新装配。open_view 属于只读展示，支持任意目录中的文件，相对路径以会话工作目录解析；不新增目录白名单或要求创建会话。路径解析为实际文件，图片/视频只返回资源身份与路径，正文读取有界。展示请求绑定会话和 operationId，UI 确认后返回真实标签或外部目的；停止、断连、超时明确失败，未知恢复遵循 Checkpoint，不宣称请求未发生。GUI 项目读取/目录树可按用户选择目录查询。
 
 浏览器可执行的输入解析与接收者补全从公开 `@quifox/shared-runtime/input-routing` 子入口导入，工具展示从 `presentation` 子入口导入；这些入口没有 Node I/O。总入口拥有 Host 装配，仅在 Bun/Node 宿主执行；前端协议 DTO 使用 type-only 导入。
 
@@ -84,3 +84,5 @@ MCP 启停只有条目的 enabled 字段；全局 .quifox/config.json 提供默�
 - Git 工作目录的命令执行前后观察文件变化，减去已有未提交编辑；命令失败后的实际修改仍展示，不假设失败即回滚。观察只限工作目录内、最多百个文本文件与单文件 1 MB，超出明确标记；非 Git、二进制、进程期间 commit 清理掉的状态与外部并发修改不提供完整归因保证。原生编辑工具继续提供确定的自身前后内容，同轮同文件聚合首个 before 与最后 after。
 
 工具链为 Bun + strict TypeScript；验证继续使用 Vitest/Node。DeepSeek 默认模型/容量的来源为 [官方模型文档](https://api-docs.deepseek.com/quick_start/pricing/)，models.dev 资料由 Host 显式刷新/缓存；资料可见不代表真实链路通过。
+
+TUI 的 npm 分发名为 `quifox`，命令同名；包只拥有安装入口与同一 TUI/Host 的 Node.js 22.12+ ESM bundle，不要求用户另装 Bun，不发布开发 workspace 或通用框架包。包携带 shell supervisor 的两个相邻入口、根 LICENSE、Memory LICENSE/NOTICE 与实际打包依赖的许可证；不包含配置、会话、源映射或构建输入路径。Bun 继续拥有开发构建与原生 CLI 编译，npm 安装不创建第二套运行逻辑。生成 manifest 保持 private，正式发布另行授权。

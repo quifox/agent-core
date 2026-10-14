@@ -8,6 +8,7 @@ coverage/
 .worktrees/
 artifacts/
 docs/harness/plans/
+.agents/notes/
 *.log
 *.tsbuildinfo
 *.bun-build
