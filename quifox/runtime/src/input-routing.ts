@@ -28,15 +28,16 @@ export function inputSuggestions(text: string, cursor: number, sources: {
     return [...commands, ...skills]
 }
 
-export function parseSpawnInput(text: string): { count: number; instructions?: string } | undefined {
+export function parseSpawnInput(text: string): { count: number; mode: 'empty' | 'fork'; instructions?: string } | undefined {
     const match = /^\s*\/spawn(?:\s+([\s\S]*))?$/.exec(text)
     if (!match) return undefined
-    const rest = match[1]?.trim() ?? '', first = /^(\S+)(?:\s+([\s\S]*))?$/.exec(rest)
+    const arguments_ = match[1]?.trim() ?? '', mode = /^--fork(?:\s|$)/.test(arguments_) ? 'fork' : 'empty'
+    const rest = mode === 'fork' ? arguments_.slice(6).trim() : arguments_, first = /^(\S+)(?:\s+([\s\S]*))?$/.exec(rest)
     const numeric = first && /^[+-]?\d+(?:\.\d+)?(?:e[+-]?\d+)?$/i.test(first[1]!)
     const count = numeric ? Number(first![1]) : 1
     if (!Number.isSafeInteger(count) || count < 1 || count > 100) throw new Error('子 Agent 数量须为 1–100 的整数。')
     const instructions = (numeric ? first![2] ?? '' : rest).trim()
-    return { count, ...(instructions ? { instructions } : {}) }
+    return { count, mode, ...(instructions ? { instructions } : {}) }
 }
 
 /** Resolve every descendant in the current conversation tree, regardless of who created it. */

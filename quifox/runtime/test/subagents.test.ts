@@ -4,6 +4,33 @@ import { SessionJournal } from '../src/journal.js'
 import type { RuntimeSnapshot, SessionView } from '../src/protocol.js'
 import { synthetic } from './synthetic.js'
 
+it.each(['empty', 'fork'] as const)('uses %s child history with authoritative request and wait identity', async mode => {
+    const originalText = 'Different claimed Agent; original reply remains unchanged.'
+    const fixture = await synthetic((input, index) => {
+        const last = input.messages.at(-1)
+        if (index === 1) return { calls: [{ id: 'child-start', name: 'subagent_start', input: { prompt: 'Assigned child task.', name: 'Connectivity', ...(mode === 'fork' ? { mode } : {}) } }] }
+        if (last?.content === 'Assigned child task.') return { text: originalText }
+        if (last?.role === 'tool') {
+            const creation = JSON.parse(last.content) as { taskId?: string; status?: string }
+            if (creation.taskId && creation.status === 'running') return { calls: [{ id: 'child-wait', name: 'subagent_wait', input: { taskId: creation.taskId } }] }
+        }
+        return { text: 'Parent completed.' }
+    }, config => { config.approval = 'allow' })
+    try {
+        const parent = await fixture.runtime.command({ type: 'create' }) as SessionView
+        await fixture.runtime.command({ type: 'submit', sessionId: parent.id, prompt: 'Parent-only goal.' }); await fixture.runtime.waitForIdle(parent.id)
+        const child = (await fixture.runtime.command({ type: 'snapshot' }) as RuntimeSnapshot).sessions.find(item => item.parentId === parent.id)!
+        const request = fixture.requests.find(input => input.messages.at(-1)?.content === 'Assigned child task.')!
+        expect(request.messages.filter(message => message.role === 'user').map(message => message.content)).toEqual(mode === 'fork' ? ['Parent-only goal.', 'Assigned child task.'] : ['Assigned child task.'])
+        const role = request.messages.filter(message => message.role === 'system').map(message => message.content).join('\n')
+        expect(role).toContain('You are child Agent Connectivity.'); expect(role).toContain(child.taskId!); expect(role).toContain(parent.id)
+        expect(request.tools.map(tool => tool.function.name)).not.toContain('subagent_start')
+        const result = await fixture.runtime.command({ type: 'snapshot', sessionId: parent.id }) as SessionView
+        const waited = result.messages.find(item => item.message.role === 'tool' && item.message.toolName === 'subagent_wait')!
+        expect(JSON.parse(waited.message.content)).toEqual({ taskId: child.taskId, name: 'Connectivity', status: 'completed', text: originalText })
+    } finally { await fixture.close() }
+})
+
 it('cancels an input that was claimed but never entered the Conversation after startup persistence failed', async () => {
     const fixture = await synthetic(() => ({ text: 'fresh reply' }))
     let append: ReturnType<typeof vi.spyOn> | undefined
@@ -97,7 +124,7 @@ it('consumes both child messages in durable order when a second submit races the
         await concurrent; await fixture.runtime.waitForIdle(child.id)
         const result = await fixture.runtime.command({ type: 'snapshot', sessionId: child.id }) as SessionView
         expect(result.pendingMessages).toHaveLength(0)
-        expect(result.messages.map(item => item.message.content)).toEqual(['original plan', 'first review', 'first reply', 'second review', 'second reply'])
+        expect(result.messages.map(item => item.message.content)).toEqual(['first review', 'first reply', 'second review', 'second reply'])
         expect(result.status).toBe('idle')
     } finally { await fixture.close() }
 })
@@ -136,7 +163,7 @@ it.each(['model', 'tools'] as const)('rejects a parent send while the child need
 })
 
 it('forks a persisted idle child, wakes it through the same Host and keeps child replies out of the parent archive', async () => {
-    const fixture = await synthetic((input, index) => index === 1 ? { calls: [{ id: 'fork-id', name: 'subagent_start', input: {} }] } :
+    const fixture = await synthetic((input, index) => index === 1 ? { calls: [{ id: 'fork-id', name: 'subagent_start', input: { mode: 'fork' } }] } :
         { text: input.messages.at(-1)?.content === 'review this' ? 'child review' : 'parent done' })
     try {
         const parent = await fixture.runtime.command({ type: 'create', title: 'Parent' }) as SessionView
@@ -179,7 +206,7 @@ it('keeps a failed child tool-send admission out of the executable child Inbox',
         taskId = child.taskId!
         await fixture.runtime.command({ type: 'submit', sessionId: parent.id, prompt: 'send rejected child message' }); await fixture.runtime.waitForIdle(parent.id)
         const childAfter = await fixture.runtime.command({ type: 'snapshot', sessionId: child.id }) as SessionView
-        expect(childAfter.pendingMessages).toHaveLength(0); expect(childAfter.messages.map(item => item.message.content)).toEqual(['original plan'])
+        expect(childAfter.pendingMessages).toHaveLength(0); expect(childAfter.messages).toHaveLength(0)
         expect(fixture.requests.some(input => input.messages.at(-1)?.content === 'must not execute')).toBe(false)
     } finally { spy.mockRestore(); await fixture.close() }
 })
@@ -208,7 +235,7 @@ it('does not let an old child result conceal a cancelled admission after interru
         await fixture.runtime.command({ type: 'submit', sessionId: parent.id, prompt: 'wait for preserved child' }); await fixture.runtime.waitForIdle(parent.id)
         const after = await fixture.runtime.command({ type: 'snapshot', sessionId: parent.id }) as SessionView
         const waiting = [...after.messages].reverse().find(item => item.message.role === 'tool' && item.message.toolName === 'subagent_wait')!
-        expect(waiting.message.content).toContain('本轮已停止'); expect(waiting.message.content).not.toContain('old child answer')
+        expect(JSON.parse(waiting.message.content)).toMatchObject({ status: 'cancelled', taskId, name: child.name }); expect(waiting.message.content).not.toContain('old child answer')
         const pending = await fixture.runtime.command({ type: 'snapshot', sessionId: child.id }) as SessionView
         expect(pending.resumeAvailable).toBe(false); expect(pending.pendingMessages).toHaveLength(0)
         await fixture.runtime.command({ type: 'submit', sessionId: child.id, prompt: 'new admitted child task' }); await fixture.runtime.waitForIdle(child.id)
@@ -220,7 +247,7 @@ it.each(['config', 'restart'] as const)('keeps the parent task capability after 
     let taskId = ''
     const fixture = await synthetic((input, index) => {
         const last = input.messages.at(-1)
-        if (index === 1) return { calls: [{ id: 'passive-fork', name: 'subagent_start', input: {} }] }
+        if (index === 1) return { calls: [{ id: 'passive-fork', name: 'subagent_start', input: { mode: 'fork' } }] }
         if (last?.content === 'wake preserved reviewer') return { calls: [{ id: 'send-review', name: 'subagent_send', input: { taskId, prompt: 'review preserved plan' } }, { id: 'wait-review', name: 'subagent_wait', input: { taskId } }] }
         return { text: last?.content === 'review preserved plan' ? 'verified child review' : 'parent complete' }
     })

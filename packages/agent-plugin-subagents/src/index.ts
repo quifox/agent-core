@@ -3,6 +3,7 @@ import { createAgent, defineTool, toolError, toolSuccess, type Agent, type Agent
 import { getConversation, type ChatInput, type Conversation } from '@quifox/agent-plugin-session'
 
 export type SubAgentResult = { status: 'idle' | 'running' | 'stopping' | 'cancelled' | 'unknown' } | { status: 'completed'; text: string } | { status: 'failed'; message: string }
+export type SubAgentWaitResult = SubAgentResult & { taskId: string; name: string }
 
 export interface SubAgentConfiguration { agent?: string; model?: string; reasoningEffort?: string; name?: string }
 export interface SubAgentControl { taskId: string; name?: string; signal(): AbortSignal | undefined; configuration?: SubAgentConfiguration }
@@ -79,8 +80,8 @@ export class SubAgentsPlugin implements AgentPlugin<ChatInput> {
         if (!Number.isSafeInteger(this.maxCompletedTasks) || this.maxCompletedTasks < 1 || this.maxCompletedTasks > 10_000) {
             throw new Error('已完成子任务保留数量必须在一到一万之间。')
         }
-        const start = defineTool({ name: 'subagent_start', description: '创建独立子 Agent。可指定 name，未指定则自动命名；名称不可重复。无 prompt 时保存前缀并待机；有 prompt 时异步启动。可指定 Agent 定义、模型配置和思考强度，缺省继承父选择。',
-            inputSchema: z.object({ prompt: z.string().trim().min(1).optional(), mode: z.enum(['empty', 'fork']).default('fork'),
+        const start = defineTool({ name: 'subagent_start', description: '创建独立子 Agent，默认空历史；显式 mode:fork 才复制父会话安全前缀。可指定 name，未指定则自动命名；名称不可重复。无 prompt 时待机；有 prompt 时异步启动。Agent 定义、模型配置和思考强度可指定，缺省继承父选择。',
+            inputSchema: z.object({ prompt: z.string().trim().min(1).optional(), mode: z.enum(['empty', 'fork']).default('empty'),
                 agent: z.string().min(1).optional(), model: z.string().min(1).optional(), reasoningEffort: z.string().min(1).optional(), name: subAgentNameSchema.optional() }).strict(),
             policy: { sideEffect: 'external', approval: 'none' }, execute: async (input, ctx) => {
                 try {
@@ -107,7 +108,7 @@ export class SubAgentsPlugin implements AgentPlugin<ChatInput> {
     }
 
     /** @param ctx - 父工具 Context。 @param prompt - 子任务的新输入。 @param mode - 空历史或安全分叉。 */
-    async start(ctx: AgentContext, prompt?: string, mode: 'empty' | 'fork' = 'fork', configuration: SubAgentConfiguration = {}): Promise<string> {
+    async start(ctx: AgentContext, prompt?: string, mode: 'empty' | 'fork' = 'empty', configuration: SubAgentConfiguration = {}): Promise<string> {
         return (await this.create(ctx, prompt, mode, configuration)).taskId
     }
 
@@ -219,7 +220,7 @@ export class SubAgentsPlugin implements AgentPlugin<ChatInput> {
         if (!task || !this.authorized(task, owner)) return toolError('子任务不存在。', { code: 'SUBAGENT_NOT_FOUND' })
         this.stop(taskId, owner)
         const result = await this.waitTask(task, timeoutMs, signal)
-        return { ...result, data: { ...result.data, taskId, name: task.name } }
+        return this.identifiedResult(result, taskId, task.name)
     }
 
     /** Bind an explicit Host executor to this task's existing wait/stop/result lifecycle. */
@@ -255,12 +256,17 @@ export class SubAgentsPlugin implements AgentPlugin<ChatInput> {
     }
 
     /** @param taskId - 本插件拥有的子任务标识。 */
-    async wait(taskId: string, owner?: AgentContext, timeoutMs = this.timeout, signal?: AbortSignal): Promise<ToolResult<SubAgentResult>> {
+    async wait(taskId: string, owner?: AgentContext, timeoutMs = this.timeout, signal?: AbortSignal): Promise<ToolResult<SubAgentWaitResult>> {
         if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 0 || timeoutMs > 300_000) throw new Error('Invalid subagent wait timeout.')
         await this.resolveTask(taskId, owner)
         const task = this.tasks.get(taskId)
         if (!task || !this.authorized(task, owner)) { return toolError('子任务不存在。', { code: 'SUBAGENT_NOT_FOUND' }) }
-        return this.waitTask(task, timeoutMs, signal)
+        return this.identifiedResult(await this.waitTask(task, timeoutMs, signal), taskId, task.name)
+    }
+
+    private identifiedResult(result: ToolResult<SubAgentResult>, taskId: string, name: string): ToolResult<SubAgentWaitResult> {
+        const data = { ...result.data!, taskId, name }
+        return { ...result, content: JSON.stringify(data), data }
     }
 
     private async waitTask(task: Task, timeoutMs: number, signal?: AbortSignal): Promise<ToolResult<SubAgentResult>> {

@@ -1,6 +1,6 @@
 # 子智能体插件
 
-- onInitialize 注册 start、send、wait、stop 四个工具；start 无 prompt 时创建待机 fork，有 prompt 时接纳首条消息并异步运行，返回稳定 taskId 与 idle/running 状态。公共 fork 方法保留为组合原语，不额外暴露模型工具。execute 使用 ctx 中的 Conversation 能力，模型输入不包含 Context。
+- onInitialize 注册 start、send、wait、stop 四个工具；start 默认 empty，不复制父历史；显式 mode:fork 才复制安全前缀。无 prompt 时创建待机子会话，有 prompt 时接纳首条消息并异步运行，返回稳定 taskId 与 idle/running 状态。公共 fork 方法按其名称保留显式分叉组合原语，不额外暴露模型工具。execute 使用 ctx 中的 Conversation 能力，模型输入不包含 Context。
 - start 可传 agent/model/reasoningEffort 选择，由 Host 在创建前校验并组装，插件不理解模型协议。明确配置错误保留业务错误码；首条接纳失败的回执提供已创建 taskId 与 idle 状态，调用方可检查或再次 send，不留下不可寻址子任务。
 - start 可指定独立的子任务 name，不与 Agent 角色定义的 agent 字段混淆；名称支持 Unicode 字母/数字、下划线与短横线，最长 64 字符，去除外围空白，按 NFKC 与大小写无关形式检查重复。未指定时从预设二十个人名分配，池耗尽后加数字后缀；Host 可在 createConversation 中确定会话树内实际名称。创建回执返回实际 name/taskId/状态，明确重名在创建前失败。名字分配不调用模型或执行 I/O。
 - start 的 empty 创建空历史，fork 从父未闭合工具批次之前复制完整前缀与压缩点。父 Session 不变化，子 Model 和压缩适配器重绑子 Session。
@@ -11,7 +11,7 @@
 - Host 可注入 newId、onInput 和 execute。sendAsync 在 onInput 成功后才接纳并调度；onInput 拒绝时返回 SUBAGENT_ADMISSION_FAILED，子队列与原任务保持不变。execute 消费同一个子 Agent，不创建第二个循环。同步 send 只表示调用方已完成持久接纳或只使用内存组合。未注入 newId 时，默认序号跳过 restore 已保留的身份。
 - restore 重建稳定 taskId、父 Conversation 能力和独立停止边界，不调用模型；首次经过同一父 Conversation 的 Context 绑定 owner，其他父 Context 不能夺取任务。传入 running/stopping 状态不合法，重启未知操作由 Host 显式标记 unknown。recordResult 只接纳没有活跃执行者时的真实 Host 结果。
 - Host 可提供 onResolveTask，在模型工具 send/wait/stop 查询已淘汰身份前显式恢复；Host 必须验证父归属与执行租约，恢复后仍经过同一 Context 的权限检查。未提供该回调时保留纯内存淘汰行为。
-- 工具访问只允许创建该子任务的父 Context；Host 直接持有插件时可通过标识观察自己的任务。结果与等待绑定实际子调用，不从父历史补结果。
+- 工具访问只允许创建该子任务的父 Context；Host 直接持有插件时可通过标识观察自己的任务。结果与等待绑定实际子调用，不从父历史补结果。wait 和优雅 stop 的模型回包及 data 都携带插件拥有的实际 taskId/name/status，完成文本独立放在 text 字段；不从子文本猜身份，不把外层身份伪装成子任务原始文本。
 - stop 请求只取消该子 Agent 的信号与已排队消息。正在执行的工具保留实际回执，未启动的余下调用明确记录 USER_INTERRUPTED；完整批次收口后才终止。本轮最终状态 cancelled，不保证业务回滚；之后的新消息可重新启动。模型停止由子信号驱动，不继承父信号。收尾期间拒绝新的 send；停止前已经开始的接纳完成后也不能重新唤醒该轮。
 - subagent_stop 的 waitForExit 可选择优雅终止：复用同一停止边界并有界等待真实收尾，返回 taskId/name 与结果；超时或调用方停止等待返回 stopping，实际子任务仍继续收尾。没有额外工具或第二套轮询状态，不要求模型生成假总结，不永久删除子会话。Host 可用 onStop(taskId, settled) 请求其独立执行者停止，并在 settled（当前执行与停止前接纳均已结束）之后提交队列取消和资源收尾；该收尾失败不能报告已停止。
 - onResult 发布当前队列的真实终态，观察失败不改变子调用结果。Host 将其保存为父侧结果通知，在父下一次请求中提供；通知不自动启动新模型轮。observeExecution 让 Host 直接恢复/执行子会话也进入同一 completion/结果边界，wait 不能继续返回旧终态。

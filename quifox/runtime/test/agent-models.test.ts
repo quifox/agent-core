@@ -132,7 +132,7 @@ it('applies tightened role permissions after recomposition and passes the effect
         expect(fixture.requests[0]?.tools.map(tool => tool.function.name)).not.toContain('run_command')
         const childRequest = fixture.requests.find(request => request.messages.at(-1)?.content === 'child request')!
         expect(childRequest.tools.map(tool => tool.function.name)).not.toContain('run_command')
-        expect(childRequest.tools.map(tool => tool.function.name)).toEqual(['read_file', 'subagent_start'])
+        expect(childRequest.tools.map(tool => tool.function.name)).toEqual(['read_file'])
     } finally { await fixture.close() }
 })
 

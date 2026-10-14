@@ -24,7 +24,7 @@ Normal startup opens a new main session. `--resume` opens a history picker; `--r
 | `/approve`, `/deny` | Reply to the displayed approval |
 | `/new [directory]`, `/resume`, `/open SESSION_ID` | Create or explicitly select a session |
 | `/tasks` | Select a child task or return to its parent |
-| `/spawn [count] [instructions]` | Create idle children from the same current prefix |
+| `/spawn [--fork] [count] [instructions]` | Create idle children; copy the parent prefix only with `--fork` |
 | `/continue`, `/stop` | Resume with replanning or stop the actual run |
 | `/config [JSON]`, `/model`, `/effort`, `/models` | Visual settings, model/effort selection or metadata refresh |
 | `/mcp`, `/agents` | MCP connections and Markdown Agent definitions |
@@ -32,7 +32,7 @@ Normal startup opens a new main session. `--resume` opens a history picker; `--r
 
 Use `$skill-name` to select a Skill whose name conflicts with a built-in command. `$catalog-identity` selects its exact source; ordinary `/skill-name` completion uses the nearest scope.
 
-`/spawn 3 Preserve these requirements` returns three names and IDs without requesting a model. `@Turing @Curie Review the code @Newton Search related issues` broadcasts the first message to Turing/Curie and sends a separate message to Newton. Use returned names or IDs; completion includes model-created children and descendants in the current conversation tree. Failed deliveries keep the draft for an identity-preserving retry.
+`/spawn 3 Review these requirements` returns three names and IDs with empty history, without requesting a model. Use `/spawn --fork 3 Review the agreed plan` to copy the safe parent prefix. QuiFox allows one child level. `@Turing @Curie Review the code @Newton Search related issues` broadcasts the first message to Turing/Curie and sends a separate message to Newton. Use returned names or IDs; completion includes model-created children. Failed deliveries keep the draft for an identity-preserving retry.
 
 Set Queue/Steer in `/config`: Queue waits for complete execution and cleanup; Steer joins the next complete request boundary. Unknown tool effects remain unknown. Ordinary `y`/`n` text never grants approval. The terminal viewport keeps the brand and input visible; long drafts show the area around the cursor. The approval card previews the operation; `/trace` opens its real parameters, receipts and file differences.
 
