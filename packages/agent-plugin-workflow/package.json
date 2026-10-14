@@ -1,0 +1,7 @@
+{
+  "name": "@quifox/agent-plugin-workflow", "version": "0.1.0", "private": true, "type": "module", "license": "MIT",
+  "main": "./dist/index.js", "types": "./dist/index.d.ts", "files": ["dist"],
+  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
+  "scripts": { "build": "bun run --filter @quifox/agent-core build && bun run --bun tsc -p tsconfig.json", "typecheck": "bun run --filter @quifox/agent-core build && bun run --bun tsc -p tsconfig.test.json --noEmit", "test": "vitest run", "check": "bun run typecheck && bun run test && bun run build" },
+  "dependencies": { "@quifox/agent-core": "workspace:*", "zod": "4.4.3" }, "devDependencies": { "typescript": "5.9.3", "vitest": "4.1.11" }
+}

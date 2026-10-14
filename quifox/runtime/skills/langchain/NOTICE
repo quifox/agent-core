@@ -1,0 +1,15 @@
+LangChain Skill collection for QuiFox.
+
+Snapshot: agent-workflow-skills-v0.2-review, supplied on 2026-10-14.
+The langgraph-* directories are unchanged official LangChain skills and references.
+Source: https://github.com/langchain-ai/langchain-skills
+Content hashes and source paths are retained in skills-lock.json.
+That original downloader file records provenance, not a QuiFox build guarantee.
+The QuiFox build verifies the supplied snapshot against content-hashes.json.
+Copyright (c) LangChain, Inc. See LICENSE for the upstream MIT license.
+
+workflow-production-design and workflow-release-checklist are separately supplied
+reference skills contributed with this collection under the QuiFox repository's
+MIT license. They retain their own contents and are not automated execution,
+fault injection, release approval or production gates. QuiFox supplies catalog
+integration only. The collection is not a separate LangGraph runtime adapter.

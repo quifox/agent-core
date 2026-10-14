@@ -21,6 +21,13 @@ async function collect(directory: string, name: string, version: string, license
     inventory.push({ name, version, license, ecosystem, notices })
 }
 const cache = join(root, 'node_modules/.bun')
+await collect(join(root, 'quifox/workflow-engine'), '@quifox/workflow-engine', '0.1.0', 'Apache-2.0', 'npm')
+await collect(join(root, 'quifox/runtime/skills/langchain'), 'langchain-skills', '0.2-review', 'MIT', 'skills')
+const skillEntry = inventory.find(item => item.name === 'langchain-skills')!
+for (const file of ['skills-lock.json', 'content-hashes.json']) {
+    const target = 'skills-langchain-skills-0.2-review/' + file
+    await cp(join(root, 'quifox/runtime/skills/langchain', file), join(output, target)); skillEntry.notices.push(target)
+}
 for (const entry of await readdir(cache, { withFileTypes: true })) if (entry.isDirectory() && entry.name !== 'node_modules') {
     const modules = join(cache, entry.name, 'node_modules')
     for (const packageEntry of await readdir(modules, { withFileTypes: true })) {

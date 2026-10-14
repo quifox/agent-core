@@ -1,0 +1,2 @@
+# Preserve the vendored Skill snapshot bytes verified by content-hashes.json.
+quifox/runtime/skills/langchain/** -text

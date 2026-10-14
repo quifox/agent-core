@@ -1,6 +1,9 @@
 import type { RuntimeConfig } from './config.js'
 
 export const builtinPlugins = [
+    { id: 'langchain', name: 'LangChain', description: 'LangChain 系列与工作流设计、交付检查 Skill 集；按需加载文档。' },
+    { id: 'workflows', name: '工作流', description: '保存、检查和运行 TypeScript 多 Agent 工作流。', surface: { kind: 'workflows', title: '工作流' } },
+    { id: 'knowledge', name: '知识检索示例（Mock）', description: '本地合成资料的检索接口示例，可追加到工作流 Agent；不连接真实知识服务。' },
     { id: 'skills', name: '技能', description: '发现和加载工作目录与全局技能。' },
     { id: 'project-guidance', name: '项目指引', description: '按目录层级注入 AGENTS.md 开发约束。' },
     { id: 'memory', name: '记忆', description: '保存任务记忆与会话摘要，按需要注入下一轮上下文。' },
@@ -13,6 +16,7 @@ export const builtinPlugins = [
 ] as const
 
 export function pluginEnabled(config: RuntimeConfig, id: string): boolean {
+    if (id === 'workflow-model') return pluginEnabled(config, 'workflows')
     if (id.startsWith('mcp:')) return config.mcp.find(server => server.id === id.slice(4))?.enabled ?? false
     if (builtinPlugins.some(plugin => plugin.id === id) && !config.installedPlugins.includes(id)) return false
     return config.plugins[id as keyof RuntimeConfig['plugins']] ?? true

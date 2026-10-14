@@ -1,5 +1,5 @@
 import { createRoot } from 'react-dom/client'
-import type { EngineFrame, RuntimeEvent, RuntimeSnapshot, SessionView } from '@quifox/shared-runtime'
+import type { EngineFrame, RuntimeEvent, RuntimeSnapshot, SessionView, WorkflowDocument, WorkflowDeployment } from '@quifox/shared-runtime'
 import { defaultShortcuts } from '@quifox/shared-runtime/preferences'
 import { DesktopEngine } from '../src/engine.js'
 import { App } from '../src/app.js'
@@ -17,6 +17,8 @@ const session: SessionView = { id: 'session', title: '界面验收', workspace: 
     updatedAt: '2026-10-13T00:00:00Z', messages: [], events: [], pendingMessages: [], approvals: [], toolStates: [], backgroundTasks: [],
     guidance: [], skills: { skills: [], issues: [] }, memory: { enabled: false, processing: false, content: '', summaries: 0 } }
 const snapshot: RuntimeSnapshot = { configurationRevision: 'synthetic', config, sessions: [session] }
+let workflowDocument: WorkflowDocument | undefined, workflowSession: SessionView | undefined
+let workflowDeployment: WorkflowDeployment | undefined
 let receive: (frame: EngineFrame) => void, sequence = 0, holding = false
 const held: string[] = []
 function event(type: string, data: unknown) {
@@ -28,8 +30,23 @@ const engine = new DesktopEngine({ start: async callback => { receive = callback
         let value: unknown = { accepted: true }
         if (command.type === 'snapshot') {
             if (command.sessionId && holding) { held.push(id); return }
-            value = command.sessionId ? session : snapshot
-        } else if (command.type === 'create') value = session
+            value = command.sessionId ? command.sessionId === workflowSession?.id ? workflowSession : session : snapshot
+        } else if (command.type === 'create') {
+            if (command.workflow) {
+                workflowSession = { ...structuredClone(session), id: 'workflow-session', title: command.workflow.name, workflowName: command.workflow.name,
+                    messages: [], workflow: { name: command.workflow.name, graph: workflowDocument!.inspection.graph } }
+                snapshot.sessions = [session, workflowSession]; value = workflowSession
+            } else value = session
+        }
+        else if (command.type === 'workflows') {
+            if (command.action === 'list') value = workflowDocument ? [{ name: workflowDocument.name }] : []
+            else if (command.action === 'templates') value = []
+            else if (command.action === 'inspect') value = workflowDocument?.inspection
+            else if (command.action === 'read' || command.action === 'save') value = workflowDocument
+            else if (command.action === 'deploy') value = workflowDeployment ??= { id: 'b'.repeat(64), name: command.name!, workspace: command.workspace ?? session.workspace, url: 'http://127.0.0.1:12345', token: 'synthetic-token' }
+            else if (command.action === 'deployments') value = workflowDeployment ? [{ ...workflowDeployment, token: undefined }] : []
+            else if (command.action === 'undeploy') { workflowDeployment = undefined }
+        }
         else if (command.type === 'config') {
             const preferences = (command.patch as { preferences?: Partial<typeof config.preferences> }).preferences
             Object.assign(config.preferences, preferences); snapshot.configurationRevision = `synthetic-${++sequence}`; value = config
@@ -39,7 +56,10 @@ const engine = new DesktopEngine({ start: async callback => { receive = callback
             { id: 'observability', name: '运行观察', description: '查看会话执行轨迹、上下文和指标', enabled: true, globalEnabled: true, source: 'builtin', surface: { kind: 'observability', title: '运行观察' } },
             { id: 'skills', name: '技能', description: '管理可用技能', enabled: true, globalEnabled: true, source: 'builtin' } ] }
         else if (command.type === 'submit') {
-            session.pendingMessages.push({ id: command.messageId ?? crypto.randomUUID(), prompt: command.prompt, mode: 'queue', status: 'pending' })
+            if (command.sessionId === workflowSession?.id) {
+                workflowSession.messages.push({ id: crypto.randomUUID(), origin: 'human', message: { role: 'user', content: command.prompt } },
+                    { id: crypto.randomUUID(), origin: 'assistant', message: { role: 'assistant', content: '**有来源的测试回答**' } })
+            } else session.pendingMessages.push({ id: command.messageId ?? crypto.randomUUID(), prompt: command.prompt, mode: 'queue', status: 'pending' })
         } else if (command.type === 'inbox') {
             const index = session.pendingMessages.findIndex(message => message.id === command.messageId)
             if (command.action === 'cancel') session.pendingMessages.splice(index, 1)
@@ -54,6 +74,26 @@ const engine = new DesktopEngine({ start: async callback => { receive = callback
         receive({ kind: 'response', id, ok: true, value: structuredClone(value) })
     } })
 const fixture = {
+    workflowState() {
+        if (!workflowSession || !workflowDocument) throw new Error('Select a workflow first.')
+        workflowSession.status = 'running'
+        const nodes = workflowDocument.inspection.graph.nodes
+        workflowSession.events = nodes.slice(0, 3).flatMap((node, index) => {
+            const birth = { type: 'call-started', definitionId: node.id, callId: 'call:' + index, executionId: 'fixture', ...index ? { parentCallId: 'call:0' } : {} }
+            return (index === 1 ? [birth, { ...birth, type: 'call-settled', outcome: 'ok' }] : [birth]).map(data => ({ version: 1 as const, sessionId: workflowSession!.id, runId: 'workflow-run', sequence: ++sequence, timestamp: new Date().toISOString(), type: 'workflow', data }))
+        })
+        for (const event of workflowSession.events) receive({ kind: 'event', event })
+    },
+    workflowInterrupted() {
+        if (!workflowSession) throw new Error('Select a workflow first.')
+        workflowSession.status = 'stopped'; workflowSession.resumeAvailable = true
+        receive({ kind: 'event', event: { version: 1, sessionId: workflowSession.id, sequence: ++sequence, timestamp: new Date().toISOString(), type: 'session', data: {} } })
+    },
+    workflow(document: WorkflowDocument, inline = false) {
+        workflowDocument = document; config.installedPlugins.push('workflows'); snapshot.configurationRevision = 'workflow'
+        if (inline) session.messages = [{ id: 'workflow-code', origin: 'assistant', message: { role: 'assistant', content: '\u0060\u0060\u0060dynamic-workflow\n' + document.script + '\n\u0060\u0060\u0060' } }]
+        event('configuration', {})
+    },
     running() { session.status = 'running'; event('session', {}) },
     stream() { holding = true; event('agent', { type: 'text-delta', delta: '流式回复持续可见' }); event('agent', { type: 'model-end' }) },
     commit() {

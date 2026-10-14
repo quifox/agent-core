@@ -10,6 +10,8 @@ QuiFox is a Harness built on agent-core, with terminal (TUI) and desktop (GUI) i
 
 **[Read the QuiFox guide →](quifox/README.md)**
 
+The [workflow workbench](quifox/runtime/docs/guides/workflows.md) runs reusable TypeScript multi-Agent scripts, with static call graphs and live invocation states.
+
 ## Agent Core
 
 agent-core is an Agent framework built around a minimal execution core and explicit plugin composition.

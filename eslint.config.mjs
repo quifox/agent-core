@@ -3,7 +3,7 @@ import tseslint from 'typescript-eslint'
 import vitest from '@vitest/eslint-plugin'
 
 export default tseslint.config(
-    { ignores: ['**/node_modules/**', '**/dist/**', '**/target/**', '**/gen/**', 'coverage/**', 'artifacts/**', '.worktrees/**'] },
+    { ignores: ['**/node_modules/**', '**/dist/**', '**/target/**', '**/gen/**', 'coverage/**', 'artifacts/**', '.worktrees/**', 'quifox/workflow-engine/src/**'] },
     {
         files: ['packages/**/*.ts', 'examples/**/*.ts', 'examples/**/*.tsx', 'quifox/**/*.ts', 'quifox/**/*.tsx'],
         extends: [eslint.configs.recommended, ...tseslint.configs.recommended],

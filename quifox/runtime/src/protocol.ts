@@ -8,6 +8,7 @@ import type { BackgroundTaskSnapshot } from '@quifox/agent-plugin-tasks'
 import type { FileChange } from './tool-presentation.js'
 import type { ObservabilitySummary, VariantComparison } from '@quifox/agent-plugin-observability'
 import type { PresentationReceipt } from '@quifox/agent-plugin-presentation'
+import type { WorkflowGraph } from './workflow.js'
 
 export interface ProjectListing { path: string; entries: { name: string; kind: 'directory' | 'symlink' | 'file' }[]; truncated: boolean }
 export interface ProjectFile { workspace: string; path: string; relativePath: string; bytes: number; kind: 'text' | 'binary' | 'image' | 'video'; content?: string | undefined; truncated: boolean }
@@ -15,6 +16,7 @@ export interface PresentationRequest { id: string; sessionId: string; operationI
 export type PresentationReply = { ok: true; receipt: PresentationReceipt } | { ok: false; error: string }
 
 export interface SessionMetadata {
+    workflow?: { name: string; script: string }; workflowActor?: boolean; workflowPlugins?: string[]
     id: string; ownerId: string; title: string; workspace: string; createdAt: string; updatedAt: string; revision: number
     parentId?: string; taskId?: string; generateMemory: boolean; creationIdentity?: string
     name?: string; initialInstructions?: string
@@ -23,11 +25,12 @@ export interface SessionMetadata {
 }
 export interface TranscriptMessage { id: string; message: AgentMessage; origin: MemoryOrigin; operations?: { callId: string; operationId: string }[] }
 export interface RuntimeEvent { version: 1; sessionId: string; runId?: string; operationId?: string; sequence: number; timestamp: string; type: string; data: unknown }
-export interface SessionSummary { id: string; title: string; workspace: string; parentId?: string; taskId?: string; name?: string; status: 'idle' | 'running' | 'stopped' | 'error'; updatedAt: string; resumeAvailable: boolean; unavailable?: string }
+export interface SessionSummary { id: string; title: string; workspace: string; parentId?: string; taskId?: string; name?: string; workflowName?: string; status: 'idle' | 'running' | 'stopped' | 'error'; updatedAt: string; resumeAvailable: boolean; unavailable?: string }
 export interface AgentRecipient { sessionId: string; taskId: string; name: string; status: SessionSummary['status'] }
 export type InputRoutingReceipt = { kind: 'spawn'; accepted: boolean; agents: AgentRecipient[]; errors: string[] } |
     { kind: 'dispatch'; accepted: boolean; deliveries: { agent: AgentRecipient; status: 'queued' | 'error'; error?: string }[] }
 export interface SessionView extends SessionSummary {
+    workflow?: { name: string; graph: WorkflowGraph }
     modelId?: string; reasoningEffort?: z.infer<typeof reasoningEffortSchema>; reasoningEffortOverride?: z.infer<typeof reasoningEffortSchema>; models?: RuntimeSnapshot['config']['models']
     configSources?: string[]; preferences?: RuntimeSnapshot['config']['preferences']; approvalMode?: 'ask' | 'allow' | 'deny'
     defaultModel?: RuntimeSnapshot['config']['model']; untrustedMcp?: string[]
@@ -60,13 +63,14 @@ export interface ModelCatalogView {
     cached: boolean
 }
 export type RuntimeCommand =
+    | { type: 'workflows'; action: 'list' | 'read' | 'save' | 'inspect' | 'templates' | 'deploy' | 'deployments' | 'undeploy'; name?: string; script?: string; workspace?: string; deploymentId?: string }
     | { type: 'snapshot'; sessionId?: string; runId?: string; messageLimit?: number; eventLimit?: number; traceOnly?: boolean }
     | { type: 'plugin-set-enabled'; pluginId: string; scope: 'global' | 'workspace'; workspace?: string; enabled: boolean }
     | { type: 'plugin-install'; pluginId: string; action: 'install' | 'remove'; scope: 'global' | 'workspace'; workspace?: string }
     | { type: 'memory-file'; sessionId?: string }
     | { type: 'project'; sessionId?: string; workspace?: string; action: 'list' | 'read' | 'search'; path?: string; query?: string }
     | { type: 'presentation-reply'; requestId: string; reply: PresentationReply }
-    | { type: 'create'; sessionId?: string; workspace?: string | null; title?: string; modelId?: string; reasoningEffort?: z.infer<typeof reasoningEffortSchema>; agent?: string; approvalMode?: 'ask' | 'allow' }
+    | { type: 'create'; sessionId?: string; workspace?: string | null; title?: string; modelId?: string; reasoningEffort?: z.infer<typeof reasoningEffortSchema>; agent?: string; approvalMode?: 'ask' | 'allow'; workflow?: { name: string; script: string } }
     | { type: 'agents'; workspace?: string }
     | { type: 'resources'; workspace?: string | null }
     | { type: 'instructions'; action: 'read' | 'save-global'; workspace?: string; content?: string }
@@ -92,6 +96,7 @@ export type EngineFrame = { kind: 'response'; id: string; ok: true; value: unkno
 
 const sessionId = z.string().regex(/^[A-Za-z0-9_-]{1,96}$/)
 export const runtimeCommandSchema = z.discriminatedUnion('type', [
+    z.object({ type: z.literal('workflows'), action: z.enum(['list', 'read', 'save', 'inspect', 'templates', 'deploy', 'deployments', 'undeploy']), name: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/).optional(), script: z.string().min(1).max(200000).optional(), workspace: z.string().min(1).optional(), deploymentId: z.string().regex(/^[a-f0-9]{64}$/).optional() }).strict(),
     z.object({ type: z.literal('snapshot'), sessionId: sessionId.optional(), runId: z.string().min(1).max(256).optional(), messageLimit: z.number().int().min(1).max(5000).optional(), eventLimit: z.number().int().min(1).max(10000).optional(), traceOnly: z.boolean().optional() }).strict(),
     z.object({ type: z.literal('project'), sessionId: sessionId.optional(), workspace: z.string().min(1).optional(), action: z.enum(['list', 'read', 'search']), path: z.string().optional(), query: z.string().max(200).optional() }).strict(),
     z.object({ type: z.literal('presentation-reply'), requestId: z.string().min(1).max(200), reply: z.discriminatedUnion('ok', [
@@ -100,7 +105,7 @@ export const runtimeCommandSchema = z.discriminatedUnion('type', [
             z.object({ destination: z.literal('external'), target: z.string().min(1).max(4096) }).strict()
         ]) }).strict(), z.object({ ok: z.literal(false), error: z.string().min(1).max(2000) }).strict()
     ]) }).strict(),
-    z.object({ type: z.literal('create'), sessionId: z.uuid().optional(), workspace: z.string().min(1).nullable().optional(), title: z.string().max(300).optional(), modelId: z.string().min(1).optional(), reasoningEffort: reasoningEffortSchema.optional(), agent: z.string().min(1).optional(), approvalMode: z.enum(['ask', 'allow']).optional() }).strict(),
+    z.object({ type: z.literal('create'), sessionId: z.uuid().optional(), workspace: z.string().min(1).nullable().optional(), title: z.string().max(300).optional(), modelId: z.string().min(1).optional(), reasoningEffort: reasoningEffortSchema.optional(), agent: z.string().min(1).optional(), approvalMode: z.enum(['ask', 'allow']).optional(), workflow: z.object({ name: z.string().min(1).max(64), script: z.string().min(1).max(200000) }).strict().optional() }).strict(),
     z.object({ type: z.literal('agents'), workspace: z.string().min(1).optional() }).strict(),
     z.object({ type: z.literal('resources'), workspace: z.string().min(1).nullable().optional() }).strict(),
     z.object({ type: z.literal('instructions'), action: z.enum(['read', 'save-global']), workspace: z.string().min(1).optional(), content: z.string().max(1_000_000).optional() }).strict(),

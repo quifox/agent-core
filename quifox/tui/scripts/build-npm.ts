@@ -12,7 +12,7 @@ await rm(join(output, 'licenses'), { recursive: true, force: true })
 await mkdir(join(output, 'bin'), { recursive: true })
 const graph = join(output, '.build-inputs.json')
 execFileSync('bun', ['build', 'quifox/tui/src/cli.tsx', 'quifox/runtime/src/process-supervisor-entry.ts', 'quifox/runtime/src/process-supervisor.ts',
-    '--target=node', '--format=esm', '--entry-naming=[name].js', '--outdir', join(output, 'bin'), `--metafile=${graph}`,
+    '--target=node', '--format=esm', '--external=typescript', '--entry-naming=[name].js', '--outdir', join(output, 'bin'), `--metafile=${graph}`,
     '--define', `process.env.QUIFOX_VERSION=${JSON.stringify(manifest.version)}`, '--define', 'process.env.DEV="false"'], { cwd: root, stdio: 'inherit' })
 await chmod(join(output, 'bin/cli.js'), 0o755)
 await cp(join(root, 'LICENSE'), join(output, 'LICENSE'))
@@ -40,7 +40,10 @@ async function owner(directory: string): Promise<string> {
     const value = await owner(dirname(directory)); owners.set(directory, value); return value
 }
 const inputs = JSON.parse(await readFile(graph, 'utf8')) as { inputs: Record<string, unknown> }
-for (const input of Object.keys(inputs.inputs)) {
+// The compiler is external to avoid machine-specific CommonJS paths; its declarations are embedded.
+const compilerManifest = fileURLToPath(import.meta.resolve('typescript/package.json'))
+const compiler = JSON.parse(await readFile(compilerManifest, 'utf8')) as { version: string }
+for (const input of [...Object.keys(inputs.inputs), compilerManifest]) {
     const directory = await owner(dirname(resolve(root, input)))
     const dependency = JSON.parse(await readFile(join(directory, 'package.json'), 'utf8')) as { name: string; version: string; license?: string }
     const key = `${dependency.name}-${dependency.version}`.replace(/[^a-zA-Z0-9._-]/g, '_'), notices: string[] = []
@@ -63,10 +66,16 @@ for (const input of Object.keys(inputs.inputs)) {
     inventory.push({ name: dependency.name, version: dependency.version, license: dependency.license ?? 'unspecified', notices, ...(fallback ? { source: fallback.source } : {}) })
 }
 await mkdir(join(output, 'licenses'), { recursive: true })
+const skillNotices = 'langchain-skills-0.2-review'
+await mkdir(join(output, 'licenses', skillNotices), { recursive: true })
+const skillFiles = ['LICENSE', 'NOTICE', 'skills-lock.json', 'content-hashes.json']
+for (const file of skillFiles) await cp(join(root, 'quifox/runtime/skills/langchain', file), join(output, 'licenses', skillNotices, file))
+inventory.push({ name: 'langchain-skills', version: '0.2-review', license: 'MIT', notices: skillFiles.map(file => skillNotices + '/' + file), source: 'https://github.com/langchain-ai/langchain-skills' })
 await writeFile(join(output, 'licenses/inventory.json'), `${JSON.stringify(inventory.sort((a, b) => a.name.localeCompare(b.name)), null, 2)}\n`)
 await rm(graph)
 await writeFile(join(output, 'package.json'), `${JSON.stringify({ name: 'quifox', version: manifest.version, private: true,
     description: 'QuiFox terminal Agent', type: 'module', license: 'MIT', engines: { node: '>=22.12.0' },
     bin: { quifox: 'bin/cli.js' }, files: ['bin', 'licenses', 'LICENSE', 'README.md', 'README.zh-CN.md'],
+    dependencies: { typescript: compiler.version },
     repository: { type: 'git', url: 'https://github.com/quifox/agent-core.git', directory: 'quifox/tui' },
     publishConfig: { access: 'public' } }, null, 2)}\n`)

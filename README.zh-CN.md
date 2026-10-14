@@ -10,6 +10,8 @@ QuiFox 是基于 agent-core 构建的 Harness，提供终端（TUI）和桌面�
 
 **[查看 QuiFox 使用指南 →](quifox/README.zh-CN.md)**
 
+[工作流工作台](quifox/runtime/docs/guides/workflows.zh-CN.md) 支持可复用的 TypeScript 多 Agent 脚本，展示静态调用图与运行时调用状态。
+
 ## Agent Core
 
 agent-core 是一个以最小执行核心和显式插件组合为基础的 Agent 框架。
