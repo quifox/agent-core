@@ -41,3 +41,13 @@ it('ignores a late checkpoint failure from a previous execution', () => {
     ]))
     expect(view.instances[0]?.state).toBe('running')
 })
+it('marks unfinished calls as interrupted after Host recovery without settlement events', () => {
+    const facts = events([{ type: 'call-started', definitionId: 'entry', callId: '1' },
+        { type: 'call-settled', definitionId: 'a', callId: '2', parentCallId: '1', outcome: 'ok' }])
+    for (const status of ['stopped', 'error', 'idle'] as const) {
+        const view = workflowCallsView(graph, facts, status)
+        expect(view.instances.map(call => call.state)).toEqual(['cancelled', 'completed'])
+        expect(view.nodes.find(node => node.id === 'entry')?.state).toBe('cancelled')
+    }
+    expect(workflowCallsView(graph, facts, 'running').instances[0]?.state).toBe('running')
+})

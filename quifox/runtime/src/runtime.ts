@@ -934,7 +934,11 @@ export class QuiFoxRuntime {
             } }) as AgentPlugin<ChatInput> : undefined
         const workflows = new WorkflowToolsPlugin({ inspect: async script => inspectWorkflow(script),
             save: (name, script) => new WorkflowLibrary(this.paths.root).save(name, script),
-            run: async (source, input) => this.executeWorkflow(entry, source.script ?? (await new WorkflowLibrary(this.paths.root).read(source.name!)).script, input) })
+            run: async (source, input) => {
+                const call = entry.checkpoint.snapshot()?.calls.find(call => call.status === 'started')
+                if (!call) throw new Error('工作流调用缺少执行身份。')
+                return this.executeWorkflow(entry, source.script ?? (await new WorkflowLibrary(this.paths.root).read(source.name!)).script, input, this.operationId(entry, call.id))
+            } })
         const ragflow = new RagFlowPlugin(input => retrieveKnowledge(entry.config.ragflow, input, this.signal(entry))) as AgentPlugin<ChatInput>
         const candidates = [preparation, entry.interrupt as AgentPlugin<ChatInput>, privateResults, entry.permissions, entry.checkpoint,
             ...!entry.metadata.workflowActor ? [{ id: 'langchain' } as AgentPlugin<ChatInput>] : [],
@@ -953,15 +957,15 @@ export class QuiFoxRuntime {
     }
 
     private workflowDocuments(config: RuntimeConfig) {
-        return { api: 'TypeScript globals: args, agent(name?, {system?, model?, plugins?}).ask<T>(instructions), phase(label), log(message), Promise.all. Every new actor starts empty. Reuse its variable for shared context in this turn. args.question is the current user input; args.messages is outer user/assistant history. Optional /** @phase Label */ on a function groups it in the graph. Return Markdown. No imports, fetch, Node or filesystem in scripts; use Agent tools. Validate with workflow_inspect, save with workflow_save, run with workflow_run. Render a script with a dynamic-workflow fenced block.',
+        return { api: 'TypeScript globals: args, agent(name?, {system?, model?, plugins?}).ask<T>(instructions), phase(label), log(message), Promise.all. Every new actor starts empty. Reuse its variable for shared context in this turn. args.question is the current user input; args.messages is outer user/assistant history. Label every named function or method with JSDoc @node Label or @phase Label. The graph shows resolved calls and actual runtime invocations. Return Markdown. No imports, fetch, Node or filesystem in scripts; use Agent tools. Validate with workflow_inspect, save with workflow_save, run with workflow_run. Render a script with a dynamic-workflow fenced block.',
             plugins: [...pluginEnabled(config, 'ragflow') ? [{ ...retrievalDocumentation, configured: !!config.ragflow }] : [],
                 ...config.mcp.filter(server => server.enabled).map(server => ({ id: 'mcp:' + server.id, description: 'MCP tools registered by the Host; use the actual tool schemas available to the Agent.' }))] }
     }
 
-    private async executeWorkflow(entry: Entry, script: string, args: Record<string, unknown>): Promise<unknown> {
+    private async executeWorkflow(entry: Entry, script: string, args: Record<string, unknown>, invocation = 'conversation'): Promise<unknown> {
         const actors = new Map<string, Entry>(), facts: Promise<void>[] = []
         const inputIdentity = entry.pendingInputId ?? entry.session.snapshot().history.filter(item => item.message.role === 'user').at(-1)?.id ?? entry.runId
-        const identity = createHash('sha256').update(JSON.stringify({ session: entry.metadata.id, inputIdentity, script, args })).digest('hex')
+        const identity = createHash('sha256').update(JSON.stringify({ session: entry.metadata.id, inputIdentity, invocation, script, args })).digest('hex')
         const inputHash = createHash('sha256').update(String(inputIdentity)).digest('hex'), prefix = entry.metadata.id + '-'
         const directory = join(this.paths.root, 'workflow-runs')
         // A newly admitted outer turn retires previous-turn checkpoints; the current turn remains replayable.

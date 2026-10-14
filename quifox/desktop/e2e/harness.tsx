@@ -84,6 +84,11 @@ const fixture = {
         })
         for (const event of workflowSession.events) receive({ kind: 'event', event })
     },
+    workflowInterrupted() {
+        if (!workflowSession) throw new Error('Select a workflow first.')
+        workflowSession.status = 'stopped'; workflowSession.resumeAvailable = true
+        receive({ kind: 'event', event: { version: 1, sessionId: workflowSession.id, sequence: ++sequence, timestamp: new Date().toISOString(), type: 'session', data: {} } })
+    },
     workflow(document: WorkflowDocument, inline = false) {
         workflowDocument = document; config.installedPlugins.push('workflows'); snapshot.configurationRevision = 'workflow'
         if (inline) session.messages = [{ id: 'workflow-code', origin: 'assistant', message: { role: 'assistant', content: '\u0060\u0060\u0060dynamic-workflow\n' + document.script + '\n\u0060\u0060\u0060' } }]

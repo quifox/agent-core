@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { ReactFlow, Background, Controls, BaseEdge, Handle, MarkerType, Position, getSmoothStepPath, type EdgeProps, type NodeProps, type Node, type Edge } from '@xyflow/react'
 import dagre from '@dagrejs/dagre'
-import type { RuntimeEvent, WorkflowGraph } from '@quifox/shared-runtime'
+import type { RuntimeEvent, SessionSummary, WorkflowGraph } from '@quifox/shared-runtime'
 import { workflowCallsView, type CallState } from './workflow-state.js'
 import { Icon } from './icons.js'
 import '@xyflow/react/dist/style.css'
@@ -25,9 +25,9 @@ function WorkflowNode({ data }: NodeProps<CallNode>) {
 const nodeTypes = { call: WorkflowNode }
 
 /** Definitions stay stable; actual invocations can be inspected as a separate call tree. */
-export function WorkflowGraphView({ graph, events = [] }: { graph: WorkflowGraph; events?: RuntimeEvent[] | undefined }) {
+export function WorkflowGraphView({ graph, events = [], status }: { graph: WorkflowGraph; events?: RuntimeEvent[] | undefined; status?: SessionSummary['status'] | undefined }) {
     const [mode, setMode] = useState<'definitions' | 'instances'>('definitions'), [selected, setSelected] = useState<string>()
-    const facts = useMemo(() => workflowCallsView(graph, events), [graph, events])
+    const facts = useMemo(() => workflowCallsView(graph, events, status), [graph, events, status])
     const displayed = useMemo(() => {
         if (mode === 'definitions') return { nodes: facts.nodes, edges: facts.edges }
         return { nodes: facts.instances.map((call, index) => ({ id: call.id, label: (graph.nodes.find(node => node.id === call.definitionId)?.label ?? '节点') + ` · ${index + 1}`, kind: 'instance', state: call.state, count: 1 })),

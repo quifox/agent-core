@@ -87,6 +87,20 @@ test('shared methods and recursive relations keep nodes and routed paths separat
     await page.screenshot({ path: '../../artifacts/ui/workflow-branches.png' })
 })
 
+test('recovered Session status closes stale active calls even without child settlement events', async ({ page }) => {
+    await page.goto('/e2e/harness.html')
+    await page.evaluate(document => window.uiFixture.workflow(document), workflowDocument)
+    await page.getByRole('button', { name: '工作流', exact: true }).click()
+    await page.getByRole('navigation', { name: '已保存工作流' }).getByRole('button', { name: 'knowledge' }).click()
+    await page.evaluate(() => window.uiFixture.workflowState())
+    await expect(page.locator('.workflow-state-running')).not.toHaveCount(0)
+    await page.evaluate(() => window.uiFixture.workflowInterrupted())
+    await expect(page.locator('.workflow-state-running')).toHaveCount(0)
+    await expect(page.locator('.workflow-state-cancelled')).not.toHaveCount(0)
+    await expect(page.locator('.workflow-state-completed')).not.toHaveCount(0)
+    await expect(page.getByRole('region', { name: '工作流图' }).getByText('已中断')).not.toHaveCount(0)
+})
+
 test('closing API management preserves the service and provides a real stop action after navigating away', async ({ page }) => {
     await page.goto('/e2e/harness.html')
     await page.evaluate(document => window.uiFixture.workflow(document), workflowDocument)

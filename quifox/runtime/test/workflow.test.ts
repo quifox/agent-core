@@ -139,6 +139,34 @@ it('repairs typed results in the same actor context before returning a validated
     expect(calls[1]).toContain('failed validation')
 })
 
+it('isolates identical workflow tool calls by durable operation identity and replays only their own asks', async () => {
+    const script = 'return await agent("Answer").ask(String(args.question));', input = { question: 'same question' }, inputId = 'same-outer-input'
+    let batch = 0, asks = 0
+    const fixture = await synthetic(request => {
+        if (request.messages.at(-1)?.content === input.question) return { text: 'answer-' + ++asks }
+        batch++
+        return batch === 1 ? { calls: ['repeated', 'second'].map(id => ({ id, name: 'workflow_run', input: { script, input } })) }
+            : batch === 2 ? { calls: [{ id: 'repeated', name: 'workflow_run', input: { script, input } }] } : { text: 'done' }
+    }, config => { config.approval = 'allow' })
+    try {
+        const session = await fixture.runtime.command({ type: 'create' }) as SessionView
+        await fixture.runtime.command({ type: 'submit', sessionId: session.id, prompt: 'run three times', messageId: inputId })
+        await fixture.runtime.waitForIdle(session.id)
+        const view = await fixture.runtime.command({ type: 'snapshot', sessionId: session.id }) as SessionView
+        expect(view.status).toBe('idle')
+        expect(asks).toBe(3)
+        const operations = view.events.filter(event => event.type === 'agent' && (event.data as { type: string }).type === 'tool-start').map(event => event.operationId!)
+        expect(new Set(operations).size).toBe(3)
+        expect((await readdir(join(fixture.root, 'workflow-runs'))).filter(file => file.endsWith('.jsonl'))).toHaveLength(3)
+        await fixture.restart()
+        const entry = fixture.runtime['entries'].get(session.id)!
+        await fixture.runtime['leases'].claim(fixture.runtime['journal'].path(session.id))
+        entry.pendingInputId = inputId
+        expect(await fixture.runtime['executeWorkflow'](entry, script, input, operations[0]!)).toBe('answer-1')
+        expect(asks).toBe(3)
+    } finally { await fixture.close() }
+}, 15000)
+
 it('restores a durable run and replays completed nodes without issuing their asks again', async () => {
     const root = await mkdtemp(join(tmpdir(), 'workflow-recovery-')), path = join(root, 'checkpoint.json'), identity = 'a'.repeat(64)
     const script = 'const a = agent("First"); const first = await a.ask("first"); return await agent("Second").ask("second:" + first);'

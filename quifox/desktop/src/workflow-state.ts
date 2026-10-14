@@ -1,4 +1,4 @@
-import type { RuntimeEvent, WorkflowGraph } from '@quifox/shared-runtime'
+import type { RuntimeEvent, SessionSummary, WorkflowGraph } from '@quifox/shared-runtime'
 
 export type CallState = 'idle' | 'running' | 'completed' | 'failed' | 'cancelled'
 export interface CallInstance { id: string; definitionId: string; parentId?: string; state: CallState }
@@ -8,7 +8,7 @@ function aggregate(states: CallState[]): CallState {
 }
 
 /** Fold observations by execution and call identity, never by a global current phase. */
-export function workflowCallsView(graph: WorkflowGraph, events: RuntimeEvent[]) {
+export function workflowCallsView(graph: WorkflowGraph, events: RuntimeEvent[], status?: SessionSummary['status']) {
     const workflowEvents = events.filter(event => event.type === 'workflow'), runId = workflowEvents.at(-1)?.runId
     const current = workflowEvents.filter(event => event.runId === runId)
     const executionId = [...current].reverse().map(event => event.data as { type?: string; executionId?: string })
@@ -24,6 +24,8 @@ export function workflowCallsView(graph: WorkflowGraph, events: RuntimeEvent[]) 
         instances.set(value.callId, { id: value.callId, definitionId: value.definitionId, ...value.parentCallId ? { parentId: value.parentCallId } : {},
             state: value.type === 'call-started' ? 'running' : value.outcome === 'ok' ? 'completed' : 'failed' })
     }
+    // Host recovery can settle a Session without a final event from the crashed child.
+    if (status && status !== 'running') for (const call of instances.values()) if (call.state === 'running') call.state = 'cancelled'
     const calls = [...instances.values()]
     const nodes = graph.nodes.map(node => { const own = calls.filter(call => call.definitionId === node.id); return { ...node, count: own.length, state: aggregate(own.map(call => call.state)) } })
     const observed = new Map<string, { from: string; to: string; states: CallState[] }>()

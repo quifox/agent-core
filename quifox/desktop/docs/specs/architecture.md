@@ -4,6 +4,8 @@
 
 图复用 [React Flow 布局](https://reactflow.dev/learn/layouting/layouting) 与[无障碍能力](https://reactflow.dev/learn/advanced-use/accessibility)，Dagre 同时计算节点和连线路径，默认从左到右排布调用层级，兄弟分支分行。调用关系视图汇总每个定义的本轮已观测调用次数；调用实例视图展示真实父子调用树，循环与并行分别保留各自实例。点击或键盘选中节点可查看调用状态。虚线为静态关系；只有真实父子调用证据使连线变为实线和状态色。未调用显示“尚未调用”，不是推断跳过或失败。运行中使用琥珀色、完成绿色、失败红色；状态同时提供文字，不依赖动画。更新状态不重置视口，用户可缩放、平移和适合窗口。
 
+图使用 Host 会话终态兜底收束缺少结束事件的调用；重启恢复为停止或错误的会话不能继续显示运行中。缺少真实返回的调用显示已中断，已有完成和失败事实保留，不推断未知副作用已回滚。
+
 Desktop 使用 Tauri 2 + React + Bun sidecar，复用 shared-runtime 的命令/事件协议与所有通用插件，Core 不因 GUI 改动。Rust 不组装另一套 Agent，也不拥有会话历史。
 
 首期原生安装包交付 Linux .deb、macOS .dmg 与 Windows NSIS .exe；Linux 平台缺省目标为 deb，流水线核对包内引擎与 Bun 编译产物逐字节一致。当前 AppImage 部署链在处理 Bun sidecar 后检查失败，未提供经验证的产物；不能以跳过失败检查宣称可分发。发布签名、公证与实际安装验收独立报告。
