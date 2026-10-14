@@ -16,7 +16,7 @@ Mutable Context and Hook data give plugin authors room to experiment. Coordinati
 
 ## QuiFox applications
 
-[QuiFox TUI and Desktop](quifox/README.md) provide interactive applications built on the shared runtime. Their application README covers terminal installation, source startup and model configuration.
+**[QuiFox TUI and Desktop](quifox/)** provide interactive applications built on the shared runtime. The [application guide](quifox/README.md) covers terminal installation, source startup and model configuration.
 
 ## Design demo
 

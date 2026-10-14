@@ -16,7 +16,7 @@ QuiFox 提供默认执行循环与覆盖生命周期的 Hook。插件提供模�
 
 ## QuiFox 应用
 
-[QuiFox TUI 与桌面端](quifox/README.zh-CN.md) 基于共享 runtime 提供可交互的应用。应用 README 统一说明终端安装、源码启动与模型配置。
+**[QuiFox TUI 与桌面端](quifox/)** 基于共享 runtime 提供可交互的应用。[中文应用指南](quifox/README.zh-CN.md) 统一说明终端安装、源码启动与模型配置。
 
 ## 设计演示
 
