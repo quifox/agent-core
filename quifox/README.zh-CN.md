@@ -1,13 +1,10 @@
-# QuiFox 应用
+# QuiFox
 
 [English](README.md) | 简体中文
 
 <img src="desktop/src/assets/fox.svg" alt="QuiFox 狐狸" width="64" height="64">
 
-QuiFox 是本仓库的终端与桌面应用层，将 [Core 与框架插件](../README.zh-CN.md) 组合成可交互的 Agent。两个界面共享会话、模型连接、工具审批、Skills、Memory、子任务与执行轨迹。
-
-> [!NOTE]
-> QuiFox 是实验性研究项目，API 与应用行为仍在演进。
+QuiFox 是基于 [agent-core](../README.zh-CN.md) 构建的 Harness，提供终端（TUI）和桌面（GUI）界面，将 Core 与框架插件组合成可交互的 Agent。两个界面共享会话、模型连接、工具审批、Skills、Memory、子任务与执行轨迹。
 
 ## 模块
 

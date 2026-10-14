@@ -1,30 +1,28 @@
-# QuiFox
+# agent-core
 
 English | [简体中文](README.zh-CN.md)
 
-> **Experimental research project.** A small execution kernel for exploring agents assembled from explicit plugins. APIs and composition contracts are evolving; production readiness has not been established.
+## <img src="quifox/desktop/src/assets/fox.svg" alt="" width="32" height="32"> QuiFox: a Harness built on agent-core
 
-<p align="center">
-  <strong>An open hook system for composing your own agent behavior.</strong>
-</p>
+If you are interested in agent-core, start with **[QuiFox](quifox/)** to see how the framework and its plugins come together in an interactive Agent application.
 
-## Agent framework
+QuiFox is a Harness built on agent-core, with terminal (TUI) and desktop (GUI) interfaces. It brings model connections, conversations, tool execution, approvals, Skills, child Agents and execution traces into one interactive environment.
 
-QuiFox provides a default execution loop and Hooks across its lifecycle. Plugins add model generation, sessions, prompts, Tools, interruption, recovery, compaction, events, child tasks, and teams.
+**[Read the QuiFox guide →](quifox/README.md)**
 
-Mutable Context and Hook data give plugin authors room to experiment. Coordination between plugins depends on their shared capabilities, ordering, and lifecycle contracts.
+## Agent Core
 
-## QuiFox applications
+agent-core is an Agent framework built around a minimal execution core and explicit plugin composition.
 
-**[QuiFox TUI and Desktop](quifox/)** provide interactive applications built on the shared runtime. The [application guide](quifox/README.md) covers terminal installation, source startup and model configuration.
+Core provides a default execution loop and Hooks across its lifecycle. Plugins supply model generation, sessions, prompts, Tools, interruption, recovery, compaction, events and collaboration, so developers can compose their own Agent behavior.
+
+> Agent Core is currently experimental. APIs and plugin composition contracts are evolving.
 
 ## Design demo
 
 A visual tour of lifecycle Hooks, sessions, interruption and recovery, plugin composition, tracing, Code Mode, and peer-Agent collaboration, followed by application examples.
 
-[![QuiFox lifecycle Hooks and plugin composition](docs/media/agent-core-demo.png)](docs/media/agent-core-demo.mp4)
-
-[Watch the QuiFox Core and plugin capabilities demo](docs/media/agent-core-demo.mp4).
+[Watch the Agent Core and plugin capabilities demo](docs/media/agent-core-demo.mp4).
 
 ## Explore plugin composition
 

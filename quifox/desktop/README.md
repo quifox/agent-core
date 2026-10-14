@@ -31,6 +31,6 @@ The resizable right workspace keeps separate tabs for source files, Markdown, im
 
 The Desktop presentation plugin lets the Agent call `open_view` to display a local file from any directory. Install and enable **Desktop presentation** from Plugins if it is not already installed. Relative paths use the session working directory. Its receipt confirms the actual opened tab; HTTP(S) URLs open in the external default browser. A full embedded browser is deferred. TUI hosts do not register this tool, and presentation instructions belong only to the current model request.
 
-The browser-only Vite preview has no native engine. A frontend build, a native window and a real model request establish different results; this experimental Host does not claim production readiness or multi-platform acceptance.
+The browser-only Vite preview has no native engine. A frontend build, a native window and a real model request establish different results.
 
 See the [Desktop contract and behavior anchors](docs/specs/architecture.md).

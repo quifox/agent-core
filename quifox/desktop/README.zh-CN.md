@@ -31,6 +31,6 @@ bun run --filter @quifox/desktop desktop:build
 
 Desktop 展示插件提供 `open_view`，让 Agent 展示任意目录中的本地文件；尚未安装时，在插件页安装并启用“Desktop 展示”。相对路径使用会话工作目录。回执确认实际打开的标签页，HTTP(S) URL 交给默认外部浏览器；完整内嵌浏览器暂缓。TUI 宿主不注册此工具，展示指引只进入当前模型请求。
 
-纯浏览器 Vite 预览没有原生引擎。前端构建、原生窗口与真实模型请求分别证明不同结果；实验性宿主不宣称生产就绪或多平台验收。
+纯浏览器 Vite 预览没有原生引擎。前端构建、原生窗口与真实模型请求分别证明不同结果。
 
 参见 [Desktop 合同与行为锚点](docs/specs/architecture.md)。
