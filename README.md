@@ -106,4 +106,4 @@ console.log(conversation.readOutput())
 
 ## Related projects
 
-QuiFox assembles capabilities through lifecycle hooks around a minimal execution kernel. [DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-harness) likewise explores composable, plugin-based agent systems, with its plugin architecture built on Cordis.
+agent-core assembles capabilities through lifecycle Hooks around a minimal execution kernel. [DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-harness) likewise explores composable, plugin-based agent systems, with its plugin architecture built on Cordis.

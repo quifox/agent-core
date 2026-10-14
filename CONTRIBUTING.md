@@ -1,6 +1,6 @@
 # Contributing
 
-QuiFox is an experimental research project. Public contracts may change before 1.0.
+agent-core is an experimental research framework. Its public contracts may change before 1.0.
 
 1. Use the Bun version pinned in the root manifest and install with `bun install --frozen-lockfile`. Keep Node.js 22.12+ available for the existing Vitest and V8 coverage tooling.
 2. Work on a short-lived topic branch; main is updated through reviewed changes.

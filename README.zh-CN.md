@@ -106,4 +106,4 @@ console.log(conversation.readOutput())
 
 ## 相关项目
 
-QuiFox 围绕最小执行内核，通过生命周期钩子组装能力。[DeepSeek Harness（DSH）](https://github.com/deepseek-ai/deepseek-harness) 同样探索可组合的插件化 Agent 系统，其插件体系基于 Cordis 构建。
+agent-core 围绕最小执行内核，通过生命周期 Hook 组合能力。[DeepSeek Harness（DSH）](https://github.com/deepseek-ai/deepseek-harness) 同样探索可组合的插件化 Agent 系统，其插件体系基于 Cordis 构建。

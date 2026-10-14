@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Scope：整个 QuiFox Monorepo。修改包前，沿祖先链读取该包 AGENTS.md 与其路由的模块 SPEC；涉及设计理念、能力组合或跨包职责时读 [跨包架构与设计原则](docs/specs/architecture.md)，仓库与 package owner 见 [包与仓库边界](docs/specs/packages.md)。
+Scope：整个 agent-core Monorepo。修改包前，沿祖先链读取该包 AGENTS.md 与其路由的模块 SPEC；涉及设计理念、能力组合或跨包职责时读 [跨包架构与设计原则](docs/specs/architecture.md)，仓库与 package owner 见 [包与仓库边界](docs/specs/packages.md)。
 
 ## 项目开发约束与文档
 
@@ -16,7 +16,7 @@ Scope：整个 QuiFox Monorepo。修改包前，沿祖先链读取该包 AGENTS.
 - 包名与公开入口以 packages/*/package.json 为准。顶级能力只有 Core 与插件包；模型连接、协议适配和底层 Provider 实现归模型插件包内部，不作为调用方需要组装的独立能力。应用专属集成与依赖属于宿主仓库。
 - Core 是协议无关的循环与钩子调度器；会话、模型请求、提示词、恢复、中断、压缩和团队调度归插件。当前边界以 Core 与各插件 SPEC 为准。
 - QuiFox 的本轮能力与 Host 开发保持 Core 源码不变；Subagents、Skills、AGENTS.md、后台工具、TUI 与 GUI 都通过插件和 Host 组合实现。
-- 展示品牌统一为 QuiFox / QUIFOX；包名、目录、命令、配置与应用标识使用小写 quifox。
+- QuiFox 应用的展示品牌统一为 QuiFox / QUIFOX；其安装命令、配置目录与应用标识使用小写 quifox，包名以各自 package.json 为准。
 - 插件对象保持共享可变语义；数组定义执行顺序。不能为迁移引入行为改变、自动重排或防御性副本。
 - 插件与 CTX 保持开放；协作契约由每套插件集自行定义，不升级为所有插件的统一强制接口。自由度与协作约定的边界见跨包架构 SPEC。
 - 面向长任务，不默认增加模型步数、运行总时长或任务总 Token 预算；模型上下文容量与具体 I/O 超时分别按实际边界处理。
