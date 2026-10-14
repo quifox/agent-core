@@ -59,8 +59,8 @@ test('the packed npm TUI installs its command without Bun or workspace dependenc
             expect(batch.stdout.trim()).toBe('package-tool-completed')
             expect(requests).toHaveLength(2)
             const receipt = JSON.parse(requests[1]!.messages.find(message => message.role === 'tool')!.content) as { stdout: string; exitCode: number }
-            expect(receipt.stdout.trim()).toBe(await realpath(workspace))
             expect(receipt.exitCode).toBe(0)
+            expect(await realpath(receipt.stdout.trim())).toBe(await realpath(workspace))
         } finally { server.closeAllConnections(); server.close() }
     } finally { await rm(directory, { recursive: true, force: true }) }
 }, 60_000)
