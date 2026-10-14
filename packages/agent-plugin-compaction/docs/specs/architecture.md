@@ -1,4 +1,4 @@
-# QuiFox 压缩插件
+# 上下文压缩插件
 
 具体 Chat 压缩范围、预算、两次候选加一次兜底和摘要提示词由本包提供。CompactionPlugin 在调用方安排的 beforeModel 位置读取插件定义的 conversation 与 modelInfo，调用组合插件提供的 prepareCompaction / generate / accept，不直接依赖 Chat Model 或消息列表。Chat 适配器封装原有 request/summarize 与消息检查点算法；Responses 的服务端检查点属于相应后端插件。
 

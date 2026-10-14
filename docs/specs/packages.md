@@ -2,7 +2,7 @@
 
 一个独立仓库管理 Core 与各插件包。包的名称、公开入口和依赖以 `packages/*/package.json` 为准；workspace 只协调源码开发与构建。
 
-项目与宿主品牌为 QuiFox，字标为 QUIFOX；包名、命令、目录、配置与应用标识使用小写 quifox。应用留在同一仓库的 quifox/{desktop,tui,runtime}，通用 Core 与插件继续由 packages/* 拥有，examples/* 只保存框架组合示例。
+仓库与框架项目名称为 agent-core。QuiFox 是基于 agent-core 的 Harness 应用，展示品牌为 QuiFox / QUIFOX；其安装命令、配置目录与应用标识使用小写 quifox，包名以各自 package.json 为准。应用留在同一仓库的 quifox/{desktop,tui,runtime}，通用 Core 与插件继续由 packages/* 拥有，examples/* 只保存框架组合示例。
 
 ## 包归属
 
