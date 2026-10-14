@@ -201,12 +201,14 @@ function mapMessage(
  * @returns 可合并进请求体的兼容字段。
  */
 function mapReasoning(
-    reasoning: ModelReasoning | undefined
+    reasoning: ModelReasoning | undefined,
+    provider: string
 ): Readonly<Record<string, unknown>> {
     if (reasoning === undefined) {
         return {}
     }
     if (reasoning.type === 'effort') {
+        if (provider === 'deepseek') return { ...(reasoning.effort === 'none' ? {} : { reasoning_effort: reasoning.effort }), thinking: { type: reasoning.effort === 'none' ? 'disabled' : 'enabled' } }
         return { reasoning_effort: reasoning.effort }
     }
     if (reasoning.type === 'budget') {
@@ -973,7 +975,7 @@ class OpenAICompatibleLanguageModel implements LanguageModel {
                 ...(request.stopSequences === undefined
                     ? {}
                     : { stop: request.stopSequences }),
-                ...mapReasoning(request.reasoning),
+                ...mapReasoning(request.reasoning, this.provider),
                 ...request.providerOptions
             }
 

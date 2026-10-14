@@ -1,0 +1,25 @@
+{
+  "name": "@quifox/shared-runtime",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" }, "./presentation": { "types": "./dist/tool-presentation.d.ts", "import": "./dist/tool-presentation.js" }, "./input-routing": { "types": "./dist/input-routing.d.ts", "import": "./dist/input-routing.js" }, "./preferences": { "types": "./dist/preferences.d.ts", "import": "./dist/preferences.js" } },
+  "scripts": {
+    "build": "bun run --filter '@quifox/agent-*' --sequential build && bun run --bun tsc -p tsconfig.json",
+    "typecheck": "bun run --filter '@quifox/agent-*' --sequential build && bun run --bun tsc -p tsconfig.test.json --noEmit --pretty false",
+    "test": "vitest run",
+    "check": "bun run build && bun run typecheck && bun run test"
+  },
+  "dependencies": {
+    "@quifox/agent-core": "workspace:*", "@quifox/agent-plugin-model": "workspace:*", "@quifox/agent-plugin-session": "workspace:*",
+    "@quifox/agent-plugin-checkpoint": "workspace:*", "@quifox/agent-plugin-compaction": "workspace:*", "@quifox/agent-plugin-interrupt": "workspace:*",
+    "@quifox/agent-plugin-steering": "workspace:*", "@quifox/agent-plugin-memory": "workspace:*", "@quifox/agent-plugin-request-context": "workspace:*",
+    "@quifox/agent-plugin-project-context": "workspace:*", "@quifox/agent-plugin-subagents": "workspace:*", "@quifox/agent-plugin-tasks": "workspace:*",
+    "@quifox/agent-plugin-mcp": "workspace:*", "@quifox/agent-plugin-events": "workspace:*", "@quifox/agent-plugin-observability": "workspace:*", "@quifox/agent-plugin-composition": "workspace:*", "@quifox/agent-plugin-presentation": "workspace:*",
+    "@modelcontextprotocol/sdk": "1.32.1", "zod": "4.4.3", "proper-lockfile": "4.1.2", "yaml": "2.9.1"
+  },
+  "devDependencies": { "@types/node": "22.19.19", "@types/proper-lockfile": "4.1.4", "typescript": "5.9.3", "vitest": "4.1.11" }
+}

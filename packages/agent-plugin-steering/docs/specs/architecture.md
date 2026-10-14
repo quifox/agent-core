@@ -1,5 +1,17 @@
 # 运行中输入转向插件
 
+## Host 的 Steer/Queue 接纳
+
+MessageInboxPlugin 保存输入命令的稳定身份、原文、模式与 pending/staged/applied 接纳事实；Conversation 仍唯一拥有历史。参考 [Codex 输入预览](https://github.com/openai/codex/blob/cab328f2754e6ec53f6a61b1c58b51f15d7a4538/codex-rs/tui/src/bottom_pane/pending_input_preview.rs) 的下一工具边界 Steer 与后续 Queue 行为，仅借鉴可观察合同。
+
+- Host 串行消费 Agent 流直到全部 onRunEnd 完成，然后通过 next 领取下一输入；不以计时器推测状态释放。运行期间的 Steer 在下一 beforeModel 的完整工具交换边界追加，Queue 等下一轮。已发出的请求不变化；末尾才到达的 Steer 保持 pending，收尾后作为下一轮，避免丢消息。
+- 同一身份的同一参数重复投递幂等；身份参数冲突明确失败。各通道按到达顺序接纳，显示原顺序与模式；Steer 影响当前任务，Queue 指定后续任务，不把跨通道的执行先后冒称同一 FIFO。
+- beforeModel 追加成功后才标 staged；Host 将 committedSnapshot 与 Session 快照作为一个持久记录写入，成功后 commitStaged。未被 Session 接纳的 claim 可 restoreStaged；已在冻结准备消息中的 staged 输入不能再次追加。具体重启核对归 Host。
+- cancelPending 按明确消息身份只取消尚未领取的 pending 项，保留原文/身份并标为 cancelled；staged/applied 不被取消。cancelled 不重新领取、恢复或视作待处理，重复取消幂等。Host 将其与 Session 状态一起提交，取消不是已执行输入的回滚。
+- 本插件不发起 run、不自动停止当前工具，不把接纳回执当作任务完成。与下述 RunSteeringPlugin 是两种显式组合选择，Host 不同时注册它们。
+
+## 并发 run 合批组合
+
 ## 所有权与入口
 
 - 调用方继续使用原 Agent 的 `run({ prompt })`。RunSteeringPlugin 不包装或替换 Agent 方法，只在最前面的 onRunStart 接纳调用。

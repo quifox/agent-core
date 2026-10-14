@@ -178,10 +178,14 @@ export class ChatSessionPlugin implements AgentPlugin<ChatInput> {
     }
 
     /** 压缩提交保留完整原记录，只改变可发送投影。 @param history - 追加了有效检查点的记录。 */
-    acceptCompaction(history: readonly SessionEntry[]): void {
+    async acceptCompaction(history: readonly SessionEntry[]): Promise<void> {
         const archive = new ChatSessionHistory({ history })
+        const snapshot = { ...this.snapshot(), history: [...archive.history] }
+        if (snapshot.pendingInput) snapshot.pendingInput.prepared = copySessionValue([...archive.messages])
+        await this.persist(snapshot)
         this.messages.splice(0, this.messages.length, ...archive.messages)
         this.archive = archive
+        this.pending = snapshot.pendingInput
     }
 
     /** @param options - Child identity or branch boundary. @param store - Child storage for the string-identity form. */
@@ -238,6 +242,18 @@ export class ChatSessionPlugin implements AgentPlugin<ChatInput> {
         }
         this.messages.push(...copySessionValue(contents.map(content => ({ role: 'user' as const, content }))))
         if (this.pending) { this.pending.prepared = copySessionValue(this.messages) }
+    }
+
+    /** Append admitted steering input at a complete model-request boundary. */
+    appendSteeringMessages(contents: readonly string[]): boolean {
+        if (!contents.length) return true
+        if (!this.active || (this.active.retry && !this.active.sent) || this.pendingToolCalls.length) {
+            return false
+        }
+        closedMessageBoundaries(this.messages)
+        this.messages.push(...copySessionValue(contents.map(content => ({ role: 'user' as const, content }))))
+        if (this.pending) this.pending.prepared = copySessionValue(this.messages)
+        return true
     }
 
     /** 最终回复来自唯一会话记录，不另维护一份累计文本。 */

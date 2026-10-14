@@ -7,4 +7,4 @@ Scope: packages/agent-plugin-teams/。先读根 AGENTS.md 与 docs/specs/archite
 - 仅使用 Core 公开钩子与 Conversation 能力；不修改 Core，不包装 Agent 方法，不补模型工具调用。
 - Teams 必须是最后一个拥有异步收尾状态的插件；只允许显式 `after: 'teams'` 且不等待外部 I/O 的协调尾对象位于其后。收尾检查延后至下一事件回合。
 - ES2022 ESM、strict TypeScript、四空格、英文 JSDoc，无隐式网络或 Node 内置依赖。
-- 验证 `pnpm --filter @quifox/agent-plugin-teams check`、架构边界、文档链接；相关时序测试必须使用真实 Core。
+- 验证 `bun run --filter @quifox/agent-plugin-teams check`、架构边界、文档链接；相关时序测试必须使用真实 Core。

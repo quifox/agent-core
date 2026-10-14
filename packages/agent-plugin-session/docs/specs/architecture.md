@@ -39,6 +39,8 @@ onRunStart：接纳原输入或取出未完成输入的冻结准备值
 
 appendUserMessages 只在活动的新输入尚未发起首次请求、且不是冻结重试时允许；拒绝运行外、已发送或冻结重试中的追加。附加输入保持为独立 user 消息，不由 Steering 维护另一份历史。各次合批用户输入由该会话保存，不能用 UI 列表反推实际模型上下文。
 
+appendSteeringMessages 供显式 Steer 接纳插件在下一 beforeModel 边界追加独立 user 消息：必须是活动会话、工具交换已闭合，不能改变尚未发送的冻结重试；未满足边界时返回 false，命令继续待接纳。已发出的请求是独立投影，不被追加操作改写；追加消息随下一次 acceptRequest 保存。接纳队列与持久化状态由插件及 Host 管理，Session 仍是历史唯一 owner。
+
 readOutput 读取当前会话尾部的非工具 assistant 回复；它不是某个指定 Run 的返回接口。调用方要取得某次调用的结果应读取该次 Outcome，不把已存在的旧回复当作本轮新结果。
 
 ## 会话与生成的组合能力
@@ -49,8 +51,10 @@ readOutput 读取当前会话尾部的非工具 assistant 回复；它不是某�
 - 模型插件在 onInitialize 发布 modelInfo；每次 onRunStart 将同一元数据能力绑定到该轮 Context。该字段由插件定义，不扩展 Core 的 AgentContext。
 - empty 创建独立的空历史；fork 默认要求闭合且空闲。明确选择 before-tools 时允许运行中从当前未闭合工具批次之前分叉，整批 assistant 调用和已有部分回执都不带入子会话；原记录、已有压缩点和闭合前缀保留，父对象不变化。参数和边界失败直接抛错，不能伪造结果闭合父批次。
 - 子组合绑定新 Session 与新 Model 请求状态；父存储回调和当前网络取消回调不隐式继承。Fork 本身不发起子任务，新输入由新 Agent 的 run/stream 接纳。
+- 子组合可显式接收自己的 signal 提供者，绑定到衍生 Model；信号不进入历史快照或持久化。
 - 组合公开 prepareCompaction 能力，返回没有消息列表的摘要分支对象：generate 生成候选，accept 验证及提交。具体协议的消息切分、请求投影和检查点处理由其适配器负责。
 - 压缩时当前 user 可暂存于检查点记录，实际发送前允许其后续准备内容覆盖同一尚未发送的记录；新增 system 贡献追加保存并在有效投影中放到前缀。不因压缩把本轮准备工作区提前冻结。
+- acceptCompaction 先保存包含原文、候选检查点与 pendingInput 的同一快照，成功后才切换有效消息和 archive；保存失败不能让运行收尾把尚未提交的候选摘要写成已提交状态。
 - 执行记录插件可发布 execution 能力。显式 `{resume:true}` 不追加新 user；组合 model 先返回该能力的待续工具产物，Session 不重复写入原 assistant，全部工具完成后才再次请求模型。压缩等待工具批次闭合，不压缩或发送半批工具消息。
 - boundary=resume 仅复制空闲父会话的已接纳历史和未闭合批次，调用方同时派生对应的执行记录插件。结果未知的调用是否可以重试由恢复策略插件决定；默认 InterruptPlugin 只允许 retrySafe=true 的工具重新进入正常执行入口，其余调用可先核实并补齐真实结果。会话不自行执行或重放工具。live Fork 不复制正在 await 的 Promise。
 

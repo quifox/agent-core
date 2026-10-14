@@ -9,12 +9,26 @@ import { ChatConversationPlugin, ChatSessionPlugin, type ChatInput } from '@quif
 import { getInterruptRunValue, InterruptPlugin } from '@quifox/agent-plugin-interrupt'
 import { ExecutionCheckpointPlugin } from '../src/index.js'
 
+it('a failed model request can continue its accepted context without a fabricated tool checkpoint', async () => {
+    let requests = 0
+    const inputs: string[][] = []
+    const f = fixture({ provider: 'test', modelId: 'chat', async *stream(request) {
+        inputs.push(request.messages.map(message => message.content))
+        if (++requests === 1) throw new Error('Synthetic model failure')
+        yield { type: 'text-delta', delta: 'done' }; yield { type: 'finish', reason: 'stop' }
+    } }, async value => value)
+    expect((await f.agent.run({ prompt: 'original' })).ok).toBe(false)
+    expect(f.checkpoint.snapshot()).toBeUndefined()
+    expect((await f.agent.run({ resume: true })).ok).toBe(true)
+    expect(inputs).toEqual([['original'], ['original']])
+})
+
 /** @param model - 已脚本化模型。 @param execute - 可观察的业务工具。 @param retrySafe - 工具的可选安全重试声明。 */
 function fixture(model: LanguageModel, execute: (id: string) => Promise<string>, retrySafe?: boolean) {
     const session = new ChatSessionPlugin({ id: 's', ownerId: 'u' })
     const generation = new ChatModelPlugin({ session, ...chatModelOptions(model) })
     const conversation = new ChatConversationPlugin({ session, generation })
-    const checkpoint = new ExecutionCheckpointPlugin()
+    const checkpoint = new ExecutionCheckpointPlugin(undefined, { canResumeModel: () => !!session.snapshot().pendingInput && session.messages.at(-1)?.role !== 'assistant' })
     const interrupt = new InterruptPlugin()
     const tools: AgentPlugin<ChatInput> = { id: 'tools', hooks: { onInitialize: async ctx => {
         ctx.tools.register(defineTool({ name: 'work', description: '', inputSchema: z.object({ id: z.string() }),

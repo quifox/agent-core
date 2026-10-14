@@ -18,7 +18,7 @@ export interface CompactionSource {
 }
 
 /** 会话分支参数不包含消息列表或供应商游标。 */
-export interface ConversationBranchOptions { id?: string; boundary?: 'complete' | 'before-tools' | 'resume' }
+export interface ConversationBranchOptions { id?: string; boundary?: 'complete' | 'before-tools' | 'resume'; signal?: () => AbortSignal | undefined }
 
 /** 独立本轮记录插件贡献的恢复能力，不包含会话历史。 */
 export interface ExecutionContinuation {
@@ -31,10 +31,11 @@ export interface ExecutionContinuation {
 /** 其他插件依赖的会话能力；Chat 和远端引用使用各自实现。 */
 export interface Conversation extends AgentPlugin<ChatInput> {
     fork(options?: ConversationBranchOptions): Promise<Conversation>
-    empty(options?: Pick<ConversationBranchOptions, 'id'>): Promise<Conversation>
+    empty(options?: Pick<ConversationBranchOptions, 'id' | 'signal'>): Promise<Conversation>
     addSystemPrompt(content: string): void
     appendUserContext(content: string): void
     appendUserMessages(contents: readonly string[]): void
+    appendSteeringMessages(contents: readonly string[]): boolean
     readOutput(): string
     confirmTool(callId: string, result: ToolResult): Promise<void>
     prepareCompaction(info: ModelInfo, instruction: string): Promise<CompactionBranch | undefined>
@@ -70,12 +71,12 @@ export class ChatConversationPlugin implements Conversation {
 
     /** @param options - 完整边界或工具批次之前的子会话。 */
     async fork(options: ConversationBranchOptions = {}): Promise<ChatConversationPlugin> {
-        return this.compose(this.options.session.fork(options))
+        return this.compose(this.options.session.fork(options), options.signal)
     }
 
     /** @param options - 独立的新会话身份。 */
-    async empty(options: Pick<ConversationBranchOptions, 'id'> = {}): Promise<ChatConversationPlugin> {
-        return this.compose(this.options.session.empty(options))
+    async empty(options: Pick<ConversationBranchOptions, 'id' | 'signal'> = {}): Promise<ChatConversationPlugin> {
+        return this.compose(this.options.session.empty(options), options.signal)
     }
 
     /** @param content - 可信提示词贡献。 */
@@ -84,6 +85,8 @@ export class ChatConversationPlugin implements Conversation {
     appendUserContext(content: string): void { this.options.session.appendUserContext(content) }
     /** @param contents - 本轮首次请求前按顺序追加的独立 user 消息。 */
     appendUserMessages(contents: readonly string[]): void { this.options.session.appendUserMessages(contents) }
+    /** @param contents - Admitted messages for the next complete request boundary. */
+    appendSteeringMessages(contents: readonly string[]): boolean { return this.options.session.appendSteeringMessages(contents) }
     /** 读取 Session 所记录的最终回复。 */
     readOutput(): string { return this.options.session.readOutput() }
     /** @param callId - 待核实原调用。 @param result - 真实核实回执。 */
@@ -96,8 +99,8 @@ export class ChatConversationPlugin implements Conversation {
     }
 
     /** @param session - 新的会话 owner；不共享父请求或存储回调。 */
-    private compose(session: ChatSessionPlugin): ChatConversationPlugin {
-        return new ChatConversationPlugin({ session, generation: this.options.generation.fork(session),
+    private compose(session: ChatSessionPlugin, signal?: () => AbortSignal | undefined): ChatConversationPlugin {
+        return new ChatConversationPlugin({ session, generation: this.options.generation.fork(session, signal),
             ...(this.options.compaction ? { compaction: this.options.compaction } : {}) })
     }
 }

@@ -1,6 +1,6 @@
 # 服务端团队展示
 
-- 一个 loopback Node 服务持有四个普通 Agent，分别组合独立 Chat 会话、生成、专家提示词、事件发布与同一个 Teams；任意成员可作为任务入口。
+- 一个 loopback Bun 服务持有四个普通 Agent，分别组合独立 Chat 会话、生成、专家提示词、事件发布与同一个 Teams；任意成员可作为任务入口。HTTP、文件与进程 API 留在 Host，可使用 Bun 支持的 Node API。
 - 模型连接由宿主通过 MODEL_API_KEY、MODEL_BASE_URL 和 MODEL_ID 配置；团队示例不绑定具体厂商或平台。
 - 每个 Agent 的 EventPublisherPlugin 绑定独立 sourceId 和事件出口。服务端为四个出口提供独立 SSE 路径，中心邮箱另有一个 Teams 消息事件源；前端不直接持有 Agent 或消费 JS 生成器。
 - Teams 维护唯一信箱事实，在 send/receive 的投递、领取位置发布通知；服务端只记录其展示投影，不创建第二份调度邮箱。领取不表示任务完成。

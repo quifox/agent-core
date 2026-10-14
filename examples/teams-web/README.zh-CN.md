@@ -8,12 +8,12 @@
 
 ## 运行
 
-使用 workspace 固定的 Node/pnpm。服务端配置 MODEL_API_KEY、MODEL_BASE_URL 和 MODEL_ID；凭证不进入浏览器。
+使用 workspace 固定版本的 Bun。服务端配置 MODEL_API_KEY、MODEL_BASE_URL 和 MODEL_ID；凭证不进入浏览器。
 
 ```sh
-pnpm install --frozen-lockfile
-pnpm build
-node examples/teams-web/dist/server.js
+bun install --frozen-lockfile
+bun run build
+bun run --filter @quifox/teams-web start
 ```
 
 打开 http://127.0.0.1:18731/，TEAMS_PORT 可改端口。向任意成员提交，追加消息仍通过该 Agent 原 run 与 Steering 接纳。团队跨调用持续存在。

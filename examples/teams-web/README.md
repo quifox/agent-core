@@ -8,12 +8,12 @@ Four members are this workbench's example configuration. TeamsPlugin has no fixe
 
 ## Run
 
-Use the workspace Node/pnpm versions. Server environment supplies MODEL_API_KEY, MODEL_BASE_URL, and MODEL_ID. Credentials never enter the browser.
+Use the workspace's pinned Bun version. Server environment supplies MODEL_API_KEY, MODEL_BASE_URL, and MODEL_ID. Credentials never enter the browser.
 
 ```sh
-pnpm install --frozen-lockfile
-pnpm build
-node examples/teams-web/dist/server.js
+bun install --frozen-lockfile
+bun run build
+bun run --filter @quifox/teams-web start
 ```
 
 Open http://127.0.0.1:18731/; TEAMS_PORT overrides the listener. Submit to any member; further messages go through that Agent's ordinary run and its Steering admission. The team remains alive across calls.

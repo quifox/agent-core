@@ -1,0 +1,7 @@
+{
+  "name": "@quifox/tui", "version": "0.1.0", "private": true, "type": "module", "license": "MIT",
+  "scripts": { "dev": "bun run src/cli.tsx", "build": "bun run --filter @quifox/shared-runtime build && bun run --bun tsc -p tsconfig.json",
+    "typecheck": "bun run --bun tsc -p tsconfig.test.json --noEmit --pretty false", "binary:build": "bun run build && bun run scripts/build-cli.ts", "test": "vitest run", "check": "bun run build && bun run typecheck && bun run test" },
+  "dependencies": { "@quifox/shared-runtime": "workspace:*", "react": "19.3.0", "ink": "8.0.0" },
+  "devDependencies": { "react-devtools-core": "8.0.0", "@types/react": "19.2.14", "@types/node": "22.19.19", "ink-testing-library": "4.0.0", "typescript": "5.9.3", "vitest": "4.1.11" }
+}

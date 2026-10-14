@@ -24,9 +24,9 @@ Scope: packages/agent-core/。先读根 AGENTS.md。
 
 ## 验证
 
-- Typecheck: pnpm --filter @quifox/agent-core typecheck
-- Tests: pnpm --filter @quifox/agent-core test
-- Build: pnpm --filter @quifox/agent-core build
-- Package gate: pnpm --filter @quifox/agent-core check
+- Typecheck: bun run --filter @quifox/agent-core typecheck
+- Tests: bun run --filter @quifox/agent-core test
+- Build: bun run --filter @quifox/agent-core build
+- Package gate: bun run --filter @quifox/agent-core check
 
 Package gate 包含类型检查、单元测试与构建。

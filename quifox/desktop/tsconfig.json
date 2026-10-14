@@ -1,0 +1,3 @@
+{ "compilerOptions": { "target": "ES2022", "module": "ESNext", "moduleResolution": "Bundler", "lib": ["ES2022", "DOM", "DOM.Iterable"], "jsx": "react-jsx",
+  "strict": true, "noUncheckedIndexedAccess": true, "exactOptionalPropertyTypes": true, "noUnusedLocals": true, "noUnusedParameters": true,
+  "noEmit": true, "skipLibCheck": true, "verbatimModuleSyntax": true, "types": ["vite/client", "node"] }, "include": ["src/**/*", "test/**/*", "scripts/**/*", "e2e/**/*", "playwright.config.ts"] }

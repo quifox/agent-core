@@ -6,4 +6,4 @@ Scope: `packages/agent-plugin-session/`。先读根 AGENTS.md 与 docs/specs/arc
 - 会话与生成是独立插件对象；会话不包装 model，不重建其他插件，不提供另一个 Agent 运行入口。
 - Conversation 可在本轮首次模型请求前接纳运行转向插件贡献的额外 user 消息；Session 仍是消息历史的唯一 owner，转向插件不得直接持有或改写 Message[]。
 - ES2022 ESM、strict TypeScript、四空格、英文 JSDoc；无隐式全局网络或 Node 依赖。
-- 验证 `pnpm --filter @quifox/agent-plugin-session check`、Core check、压缩包与 Host 相关测试。
+- 验证 `bun run --filter @quifox/agent-plugin-session check`、Core check、压缩包与 Host 相关测试。

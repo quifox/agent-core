@@ -4,6 +4,8 @@
 
 ## 所有权与 Host
 
+- PluginActivationPlugin 负责候选启停选择，读取调用方给定的 enabled 标记；保留对象引用与相对顺序。Host 可在 createAgent 前调用 select；作为普通插件使用时应置于注册数组首位，在其他对象注册/初始化前移除禁用对象，并移除策略对象自身。它不保存配置、不卸载已运行资源、不成为通用依赖管理器；活动运行的生命周期交接由 Host 与 Composition 既有合同负责。
+
 - 每个进入 onRunStart 的 Outcome 拥有自己的提案；CTX 标识 Agent。setNextPlugins 定位最近一个尚未进入最终收尾的运行；没有这样的运行时抛错，不是空闲配置 setter。
 - Host 提供 replaceAgent(nextAgent)，用普通引用容器、闭包或应用类更新当前 Agent。Composition 可独立于 Code Mode 使用，其他 Hook/Host 能力可提交数组。
 - 提交完整列表，最后一次为准；允许空数组、自移除、同 ID 和重复位置。复制数组容器，保留对象；只移除本 owner 的私有尾对象，不推断其他依赖或迁移状态。

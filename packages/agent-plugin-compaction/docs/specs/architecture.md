@@ -1,4 +1,4 @@
-# Quifox 压缩插件
+# QuiFox 压缩插件
 
 具体 Chat 压缩范围、预算、两次候选加一次兜底和摘要提示词由本包提供。CompactionPlugin 在调用方安排的 beforeModel 位置读取插件定义的 conversation 与 modelInfo，调用组合插件提供的 prepareCompaction / generate / accept，不直接依赖 Chat Model 或消息列表。Chat 适配器封装原有 request/summarize 与消息检查点算法；Responses 的服务端检查点属于相应后端插件。
 
@@ -10,3 +10,9 @@
 - 达到 contextWindow - maxOutputTokens 时等待完整压缩；固定前缀、当前输入或最近工具批次无法容纳时明确失败。消息准备与压缩顺序由开发者安排；普通请求继续共享可变，不因后续插件修改而增加自动拒绝发送的检查。
 
 配置失败早于副作用，取消后不开始新操作；业务调用一次，框架不自动重试。
+
+## 容量配置归一化
+
+`resolveCompactionBudget` 接受模型原始 context、可选用户 context、本轮 maxOutputTokens、安全余量与可选 compactTokens。有效 context 取模型与用户配置的最小值；输入阈值取 `有效 context - maxOutputTokens - 安全余量`、compactTokens 与模型独立输入上限的最小值。安全余量默认 1024，可显式配置为非负整数；其余容量为正安全整数，结果不能为零或负数。
+
+归一化只返回有效 contextWindow 与 maxInputTokens，组合层传给模型资料/压缩适配器；不增加 Core 字段或默认任务总预算。未配置 compactTokens 时只受实际容量约束；用户抬高 context 不能扩大模型原始容量。

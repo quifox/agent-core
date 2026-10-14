@@ -7,5 +7,13 @@ coverage/
 .DS_Store
 .worktrees/
 artifacts/
+docs/harness/plans/
 *.log
 *.tsbuildinfo
+*.bun-build
+.quifox/
+quifox/release/
+**/src-tauri/target/
+**/src-tauri/binaries/
+**/src-tauri/gen/
+**/src-tauri/icons/

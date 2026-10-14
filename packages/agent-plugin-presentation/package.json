@@ -1,0 +1,13 @@
+{
+  "name": "@quifox/agent-plugin-presentation",
+  "version": "0.1.0", "private": true, "type": "module", "license": "MIT",
+  "types": "./dist/index.d.ts", "main": "./dist/index.js", "files": ["dist"],
+  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
+  "scripts": {
+    "build": "bun run --filter @quifox/agent-core build && bun run --bun tsc -p tsconfig.json",
+    "typecheck": "bun run --filter @quifox/agent-core build && bun run --bun tsc -p tsconfig.test.json --noEmit --pretty false",
+    "test": "vitest run", "check": "bun run build && bun run typecheck && bun run test"
+  },
+  "dependencies": { "@quifox/agent-core": "workspace:*", "zod": "4.4.3" },
+  "devDependencies": { "typescript": "5.9.3", "vitest": "4.1.11" }
+}

@@ -60,7 +60,7 @@ export class ChatCompactionSource implements CompactionSource {
                 const prepared = await fork.accept(result)
                 if (!prepared) { return false }
                 checkSessionAbort(request.signal)
-                this.session.acceptCompaction(context.history)
+                await this.session.acceptCompaction(context.history)
                 request.messages = this.session.messages
                 return true
             }

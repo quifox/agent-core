@@ -1,5 +1,6 @@
 import { createAgent } from '@quifox/agent-core'
 import type { Agent, AgentContext, AgentHooks, AgentPlugin, AgentRunOutcome } from '@quifox/agent-core'
+export { PluginActivationPlugin, type ActivatablePlugin } from './activation.js'
 
 /** Host 持有 Agent 引用；插件负责在最后收尾时交接。 */
 export interface PluginCompositionOptions<Input = unknown, Ctx extends AgentContext = AgentContext> {

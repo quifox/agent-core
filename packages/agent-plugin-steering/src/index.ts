@@ -169,3 +169,5 @@ function handlers<Handler>(value: Handler | Handler[] | undefined): Handler[] {
 
 /** 创建默认运行转向插件。 */
 export function createRunSteeringPlugin(): RunSteeringPlugin { return new RunSteeringPlugin() }
+export { MessageInboxPlugin } from './inbox.js'
+export type { InboxMessage, MessageInboxSnapshot, MessageSubmission } from './inbox.js'

@@ -8,6 +8,29 @@ import { chatModelOptions, type ScriptedModel as LanguageModel } from '../../../
 import { ChatSessionPlugin, ChatConversationPlugin, copySessionValue, getConversation } from '../src/index.js'
 import { createToolEntryPlugin, deriveToolPlugin } from '@quifox/agent-plugin-tools'
 
+it('steering appends only at the next complete request boundary without changing the sent request', async () => {
+    const requests: ModelRequest[] = []
+    const model: LanguageModel = { provider: 'test', modelId: 'chat', async *stream(request) {
+        requests.push(copySessionValue(request))
+        if (requests.length === 1) {
+            yield { type: 'tool-call', call: { id: 'read', name: 'read', input: {} } }; yield { type: 'finish', reason: 'tool-calls' }
+        } else { yield { type: 'text-delta', delta: 'done' }; yield { type: 'finish', reason: 'stop' } }
+    } }
+    const session = new ChatSessionPlugin({ id: 's', ownerId: 'o' })
+    const generation = new ChatModelPlugin({ session, ...chatModelOptions(model) })
+    const conversation = new ChatConversationPlugin({ session, generation })
+    let boundary = 0
+    const agent = createAgent({ plugins: [conversation, { id: 'steer', hooks: {
+        onInitialize: async ctx => { ctx.tools.register(defineTool({ name: 'read', description: 'Read synthetic data.', inputSchema: z.object({}).strict(),
+            policy: { sideEffect: 'none', approval: 'none' }, execute: async () => toolSuccess('read result') })) },
+        beforeModel: async ctx => { if (++boundary === 2) getConversation(ctx).conversation.appendSteeringMessages(['new direction']); return { action: 'continue' } }
+    } }] })
+    expect((await agent.run({ prompt: 'original task' })).ok).toBe(true)
+    expect(requests[0]!.messages.map(message => message.content)).toEqual(['original task'])
+    expect(requests[1]!.messages.map(message => message.content)).toEqual(['original task', '', 'read result', 'new direction'])
+    expect(session.messages.at(-2)).toEqual({ role: 'user', content: 'new direction' })
+})
+
 it('单组合保留组件生命周期，跨轮 Context 重新获得能力；empty/fork 的模型重绑对应 Session', async () => {
     const requests: ModelRequest[] = []
     const model: LanguageModel = { provider: 'test', modelId: 'chat', async *stream(request) {
