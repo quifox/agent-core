@@ -100,7 +100,7 @@ export function nativeTools(options: NativeToolsOptions): AgentPlugin {
                 const next = original.replace(input.oldText, input.newText)
                 await saveFile(target, next); return toolSuccess('Patch applied.', { change: change(target, original, next) })
             } }))
-        ctx.tools.register(defineTool({ name: 'run_command', description: `Run a native ${process.platform} shell command in the workspace.${options.backgroundEnabled === false ? '' : ' background returns a task identity immediately; use task_get/wait/cancel.'} Cancellation does not imply rollback.`,
+        ctx.tools.register(defineTool({ name: 'run_command', description: `Run a native ${process.platform} shell command in the workspace.${options.backgroundEnabled === false ? '' : ' background returns a task identity immediately; use task_wait(timeoutMs: 0) to check status, task_wait to wait, or task_cancel to request cancellation.'} Cancellation does not imply rollback.`,
             inputSchema: z.object({ command: z.string().trim().min(1), cwd: z.string().optional(), ...(options.backgroundEnabled === false ? {} : { background: z.boolean().default(false) }),
                 timeoutMs: z.number().int().positive().max(86_400_000).optional() }).strict(), policy: writePolicy,
             execute: async (input, context: AgentContext) => {

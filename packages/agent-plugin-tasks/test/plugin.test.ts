@@ -138,6 +138,32 @@ it('mutating observation receipts cannot rewrite task facts or completion', asyn
     expect((await tasks.wait(ctx, id))!.result).toEqual(toolSuccess('saved', { count: 1 }))
 })
 
+it('exposes one observation tool that can check a task without waiting', async () => {
+    const tasks = new BackgroundTasksPlugin()
+    let finish!: (result: ToolResult) => void
+    const pending = new Promise<ToolResult>(resolve => { finish = resolve })
+    let taskId = '', turn = 0, names: string[] = []
+    let context!: AgentContext
+    const agent = createAgent({ plugins: [tasks, { id: 'host', hooks: {
+        onInitialize: async ctx => { context = ctx; taskId = tasks.submit(ctx, async () => pending) },
+        model: async function* (ctx) {
+            names = ctx.tools.definitions().map(tool => tool.name)
+            const fields = { reasoning: '', usage: {}, finishReason: 'stop' as const }
+            return ++turn === 1
+                ? { ...fields, text: '', toolCalls: [{ id: 'check', name: 'task_wait', input: { taskId, timeoutMs: 0 } }] }
+                : { ...fields, text: 'done', toolCalls: [] }
+        }
+    } }] })
+    const events: AgentEvent[] = []
+    for await (const event of agent.stream({})) events.push(event)
+    expect(names).toEqual(['task_wait', 'task_cancel'])
+    expect(events.find(event => event.type === 'tool-result')).toMatchObject({ run: {
+        call: { name: 'task_wait' }, result: { data: { id: taskId, status: 'running' } }
+    } })
+    finish(toolSuccess('complete'))
+    expect(await tasks.wait(context, taskId)).toMatchObject({ status: 'completed' })
+})
+
 it('ordinary Core tools submit and observe the same background operation', async () => {
     const tasks = new BackgroundTasksPlugin()
     let finish!: (result: ToolResult) => void

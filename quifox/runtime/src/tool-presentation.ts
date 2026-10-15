@@ -25,6 +25,8 @@ export function toolSummary(call: Pick<ToolCall, 'name' | 'input'>): string {
     if (call.name === 'subagent_wait') return '等待子 Agent 回复'
     if (call.name === 'subagent_stop') return '停止子 Agent'
     if (call.name.startsWith('skill_')) return `${call.name === 'skill_load' ? '加载技能' : call.name === 'skill_read' ? '读取技能资源' : '查看技能目录'} ${String(input.skill ?? '')}`.trim()
-    if (call.name.startsWith('task_')) return `${call.name === 'task_cancel' ? '取消' : call.name === 'task_wait' ? '等待' : '查看'}后台任务`
+    if (call.name === 'task_cancel') return '取消后台任务'
+    if (call.name === 'task_wait') return input.timeoutMs === 0 ? '查看后台任务' : '等待后台任务'
+    if (call.name.startsWith('task_')) return '查看后台任务'
     return `调用 ${call.name.replace(/_/g, ' ')}`
 }
