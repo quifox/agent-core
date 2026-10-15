@@ -31,9 +31,7 @@ export class BackgroundTasksPlugin implements AgentPlugin {
     constructor(private readonly options: { newId?(): string; onTask?(snapshot: BackgroundTaskSnapshot): void; signal?(owner: AgentContext): AbortSignal | undefined } = {}) {
         const inputSchema = z.object({ taskId: z.string().min(1) }).strict()
         const policy = { sideEffect: 'none', approval: 'none' } as const
-        const get = defineTool({ name: 'task_get', description: 'Read the latest facts of a background task.', inputSchema, policy,
-            execute: async (input, ctx) => this.receipt(this.get(ctx, input.taskId)) })
-        const wait = defineTool({ name: 'task_wait', description: 'Wait for a background task; timeout returns its current facts.',
+        const wait = defineTool({ name: 'task_wait', description: 'Observe a background task. Set timeoutMs to 0 to return its current status immediately; omit it to wait up to 10 seconds, or set a positive timeout (up to 300000 ms). A timeout does not cancel or restart the task.',
             inputSchema: inputSchema.extend({ timeoutMs: z.number().int().min(0).max(300_000).optional() }), policy,
             execute: async (input, ctx) => {
                 const signal = this.options.signal?.(ctx), snapshot = await this.wait(ctx, input.taskId, input.timeoutMs, signal)
@@ -42,7 +40,7 @@ export class BackgroundTasksPlugin implements AgentPlugin {
         const cancel = defineTool({ name: 'task_cancel', description: 'Request cancellation; completion does not imply rollback.', inputSchema,
             policy: { sideEffect: 'external', approval: 'none', retrySafe: true },
             execute: async (input, ctx) => this.receipt(this.cancel(ctx, input.taskId)) })
-        this.hooks = { onInitialize: async ctx => { ctx.tools.register(get); ctx.tools.register(wait); ctx.tools.register(cancel) } }
+        this.hooks = { onInitialize: async ctx => { ctx.tools.register(wait); ctx.tools.register(cancel) } }
     }
 
     /**
