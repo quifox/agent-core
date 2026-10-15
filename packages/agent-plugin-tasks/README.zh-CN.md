@@ -4,7 +4,7 @@
 
 BackgroundTasksPlugin 保存后台操作状态，Core 继续普通串行工具循环。与 Conversation 和 Host 工具一起注册；提交工具调用 `tasks.submit(ctx, signal => operation(signal))` 并立即返回身份，operation 返回真实 ToolResult。
 
-插件注册 task_get、task_wait、task_cancel。wait 默认等待十秒，timeoutMs 可取零到五分钟；超时返回当前事实，不取消或重复执行。任务按提交者 Agent Context 隔离。
+插件注册 task_wait、task_cancel。task_wait({taskId, timeoutMs: 0}) 立即查询；否则默认等待十秒，timeoutMs 最长五分钟。超时返回当前事实，不取消或重复执行。任务按提交者 Agent Context 隔离。可选 context(ctx) writer 按实际已注册工具提供简短说明。
 
 取消是请求，不表示业务回滚；确认结束前保持 running，取消后到达的真实结果仍保留。观察回执不能反写内部状态；不可序列化的可选 data 省略并标记 resultDataUnavailable，操作真实状态和文本继续可读。
 

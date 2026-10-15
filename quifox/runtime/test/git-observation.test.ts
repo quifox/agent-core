@@ -34,7 +34,7 @@ it('keeps late background changes attached to their originating run while a newe
     const script = "const fs=require('fs');const timer=setInterval(()=>{if(fs.existsSync('release-task')){clearInterval(timer);fs.writeFileSync('late.txt','late background edit\\n')}},10)"
     const command = `${JSON.stringify(process.execPath)} -e ${JSON.stringify(script)}`
     const fixture = await synthetic(async (_input, index) => {
-        if (index === 1) return { calls: [{ id: 'background', name: 'run_command', input: { command, background: true } }] }
+        if (index === 1) return { calls: [{ id: 'background', name: 'run_command', input: { command, timeoutMs: 0 } }] }
         if (index === 3) await gate
         return { text: 'completed turn' }
     }, config => { config.approval = 'allow' })

@@ -4,6 +4,7 @@ import { defineTool, toolError, toolSuccess, type AgentContext, type AgentHooks,
 
 /** Host reads are confined to declared roots, including real-path/symlink validation. */
 export interface ProjectFiles {
+    sourcePath(root: string, path: string): string
     list(root: string, path: string): Promise<string[]>
     /** Read only the YAML frontmatter, excluding delimiter lines and the Markdown body. */
     metadata(root: string, path: string): Promise<string | undefined>
@@ -11,7 +12,7 @@ export interface ProjectFiles {
 }
 
 export interface ContextWriter { set(key: string, content: string): void }
-export interface SkillEntry { id: string; root: string; directory: string; name: string; description: string }
+export interface SkillEntry { id: string; root: string; directory: string; name: string; description: string; path: string }
 export interface SkillCatalog { skills: SkillEntry[]; issues: { root: string; directory: string; message: string }[] }
 export interface SkillsPluginOptions {
     files: ProjectFiles
@@ -45,22 +46,17 @@ export class SkillsPlugin implements AgentPlugin {
 
     constructor(private readonly options: SkillsPluginOptions) {
         const policy = { sideEffect: 'none', approval: 'none', retrySafe: true } as const
-        const load = defineTool({ name: 'skill_load', description: 'Load one named skill or exact catalog identity before applying its instructions.',
-            inputSchema: z.object({ skill: z.string().min(1) }).strict(), policy, execute: async (input, ctx) => this.load(ctx, input.skill) })
-        const read = defineTool({ name: 'skill_read', description: 'Read a relative reference or resource from an already loaded skill. This does not execute scripts.',
-            inputSchema: z.object({ skill: z.string().min(1), path: z.string().min(1) }).strict(), policy,
-            execute: async (input, ctx) => this.read(ctx, input.skill, input.path) })
-        const list = defineTool({ name: 'skill_list', description: 'List available skill metadata and discovery issues.', inputSchema: z.object({}).strict(), policy,
-            execute: async () => { const catalog = await this.catalog(); return toolSuccess(JSON.stringify(catalog), catalog) } })
+        const list = defineTool({ name: 'skill_list', description: 'Rescan available skills and return metadata, readable SKILL.md paths and discovery issues.', inputSchema: z.object({}).strict(), policy,
+            execute: async () => { const catalog = await this.catalog(true); return toolSuccess(JSON.stringify(catalog), catalog) } })
         this.hooks = {
-            onInitialize: async ctx => { ctx.tools.register(load); ctx.tools.register(read); ctx.tools.register(list) },
+            onInitialize: async ctx => { ctx.tools.register(list) },
             onRunStart: async (ctx, input) => {
                 this.selected.set(ctx, this.options.selected?.(input, ctx) ?? [])
                 return { action: 'continue' }
             },
             beforeModel: async ctx => {
                 const catalog = await this.catalog()
-                this.options.context(ctx).set('skills', `Available Agent Skills. Use skill_load before following a skill; read its relative resources with skill_read. Scripts require the ordinary execution tool and its approval.\n${JSON.stringify(catalog)}`)
+                this.options.context(ctx).set('skills', `Available skills with SKILL.md paths. ${ctx.tools.get('run_command') ? 'Read the relevant file before applying a skill; resolve references relative to its directory. Use run_command for file reads and scripts, under its normal permissions. ' : ''}${ctx.tools.get('skill_list') ? 'Use skill_list to rescan changed skills. ' : ''}\n${JSON.stringify(catalog)}`)
                 for (const [index, name] of (this.selected.get(ctx) ?? []).entries()) {
                     const result = await this.load(ctx, name)
                     if (result.status !== 'success') throw new Error('Explicitly selected skill is unavailable or ambiguous.')
@@ -72,9 +68,11 @@ export class SkillsPlugin implements AgentPlugin {
     }
 
     /** Discover only metadata; infrastructure failures remain visible and can be retried. */
-    catalog(): Promise<SkillCatalog> {
+    catalog(refresh = false): Promise<SkillCatalog> {
+        if (refresh) this.discovered = undefined
         if (!this.discovered) {
-            this.discovered = this.discover().catch(error => { this.discovered = undefined; throw error })
+            const pending: Promise<SkillCatalog> = this.discover().catch(error => { if (this.discovered === pending) this.discovered = undefined; throw error })
+            this.discovered = pending
         }
         return this.discovered
     }
@@ -125,7 +123,9 @@ export class SkillsPlugin implements AgentPlugin {
                     if (document.errors.length || document.warnings.length) throw new Error('Invalid YAML metadata.')
                     const metadata = metadataSchema.parse(document.toJS({ maxAliasCount: 10 }))
                     if (metadata.name !== directory) throw new Error('Skill name must match its directory.')
-                    catalog.skills.push({ id: `${root}/${directory}`, root, directory, name: metadata.name, description: metadata.description })
+                    const path = `${directory}/SKILL.md`
+                    catalog.skills.push({ id: `${root}/${directory}`, root, directory, name: metadata.name, description: metadata.description,
+                        path: this.options.files.sourcePath(root, path) })
                 } catch { catalog.issues.push({ root, directory, message: 'Invalid SKILL.md metadata.' }) }
             }
         }

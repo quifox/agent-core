@@ -135,7 +135,7 @@ it.each(['model', 'tools'] as const)('rejects a parent send while the child need
         const last = input.messages.at(-1)
         if (index === 1) return { calls: [{ id: 'fork', name: 'subagent_start', input: {} }] }
         if (last?.content === 'new parent message') return { calls: [{ id: 'send', name: 'subagent_send', input: { taskId, prompt: 'new child message' } }] }
-        if (boundary === 'tools' && last?.content === 'original child task') return { calls: [{ id: 'read', name: 'list_files', input: {} }] }
+        if (boundary === 'tools' && last?.content === 'original child task') return { calls: [{ id: 'read', name: 'skill_list', input: {} }] }
         return { text: last?.content === 'original child task' ? 'recovered original reply' : 'done' }
     })
     try {

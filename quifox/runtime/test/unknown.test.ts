@@ -6,7 +6,7 @@ import { SessionJournal } from '../src/journal.js'
 import { synthetic } from './synthetic.js'
 
 it('never retries an unsafe unknown call on continue; replan records the original unknown receipt before the next request', async () => {
-    const fixture = await synthetic((_input, index) => index === 1 ? { calls: [{ id: 'unknown-original', name: 'write_file', input: { path: 'never.txt', content: 'unsafe' } }] } : { text: 'replanned' }, config => { config.approval = 'allow' })
+    const fixture = await synthetic((_input, index) => index === 1 ? { calls: [{ id: 'unknown-original', name: 'apply_patch', input: { path: 'never.txt', oldText: '', newText: 'unsafe' } }] } : { text: 'replanned' }, config => { config.approval = 'allow' })
     const original = SessionJournal.prototype.append
     let fail = true
     let replanFail = true

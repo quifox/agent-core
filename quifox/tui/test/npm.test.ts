@@ -26,6 +26,7 @@ test('the packed npm TUI installs its command without Bun or workspace dependenc
         expect(inventory.find(item => item.name === '@quifox/agent-plugin-memory')?.notices.some(file => file.endsWith('/NOTICE'))).toBe(true)
         expect(inventory.find(item => item.name === '@quifox/workflow-engine')?.notices.some(file => file.endsWith('/NOTICE'))).toBe(true)
         expect(inventory.find(item => item.name === 'langchain-skills')?.notices.some(file => file.endsWith('/LICENSE'))).toBe(true)
+        expect(inventory.find(item => item.name === 'shell-quote')?.notices.length).toBeGreaterThan(0)
         expect(inventory.filter(item => item.notices.length === 0)).toEqual([])
         for (const item of inventory) for (const file of item.notices) expect((await readFile(join(output, 'licenses', file), 'utf8')).trim()).not.toBe('')
         await mkdir(prefix, { recursive: true })
@@ -69,7 +70,7 @@ test('the packed npm TUI installs its command without Bun or workspace dependenc
             expect(workflow.stdout.trim()).toBe('package-tool-completed')
             expect(requests).toHaveLength(5)
             expect(requests[3]!.messages.at(-1)?.content).toBe('workflow-probe')
-            expect(requests[4]!.messages.find(message => message.role === 'tool')?.content).toContain('工作流运行完成')
+            expect(requests[4]!.messages.find(message => message.role === 'tool')?.content).toBe('packaged-workflow-answer')
         } finally { server.closeAllConnections(); server.close() }
     } finally { await rm(directory, { recursive: true, force: true }) }
 }, 60_000)

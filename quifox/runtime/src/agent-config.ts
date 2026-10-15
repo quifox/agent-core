@@ -36,7 +36,7 @@ export async function agentCatalog(workspace: string, applicationRoot: string): 
     return { agents: [...agents.values()], issues }
 }
 
-const aliases: Record<string, string> = { Read: 'read_file', Write: 'write_file', Edit: 'apply_patch', Bash: 'run_command', Glob: 'list_files', Agent: 'subagent_start' }
+const aliases: Record<string, string> = { Edit: 'apply_patch', Bash: 'run_command', Agent: 'subagent_start' }
 export function matchesTool(pattern: string, name: string): boolean {
     const value = aliases[pattern] ?? pattern
     return value === '*' || value === name || (value.endsWith('*') && name.startsWith(value.slice(0, -1)))

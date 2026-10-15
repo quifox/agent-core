@@ -1,6 +1,6 @@
 ---
 name: typescript-workflows
-description: Author, inspect, save and run reusable TypeScript multi-Agent workflows in QuiFox, with knowledge retrieval plugins and automatically generated graphs.
+description: Author and run reusable TypeScript multi-Agent workflows in QuiFox, with plugin tools and automatically generated graphs.
 ---
 
 # TypeScript workflows
@@ -15,13 +15,13 @@ Globals:
 - phase("Label"): an optional progress marker, not a graph node.
 - log(message): progress. Promise.all, branches, loops and helper functions retain ordinary TypeScript semantics.
 
-Read plugins.md with skill_read for enabled business plugins, their tools and examples. Infrastructure is already included and intentionally omitted. Only registered enabled plugin IDs can be appended. Retrieval tools are also directly callable outside a workflow.
+Read plugins.md next to this file using run_command for enabled business plugins, their tools and examples. Read referenced files relative to this skill directory. Infrastructure is already included and intentionally omitted. Only registered enabled plugin IDs can be appended. Retrieval tools are also directly callable outside a workflow.
 
 Read recovery.md before designing a deployable workflow. Composable examples are in templates/parallel-retrieval.ts and templates/safe-retry.ts. Prefer read-only retrieval and stable named actors. Do not claim exactly-once effects or automatic rollback.
 
 Scripts have no imports, fetch, Node or filesystem. Ask an Agent to use its authorized tools. This version does not expose the upstream world/artifact/hole APIs. Never put secrets in scripts.
 
-Call workflow_inspect to validate the script. Return a Markdown string for the outer conversation. Display scripts in a dynamic-workflow fenced code block so the GUI renders a graph with Run. workflow_save stores a reusable named script; workflow_run accepts exactly one of name or script and an explicit input object.
+Return a Markdown string for the outer conversation. Display scripts in a dynamic-workflow fenced code block so the GUI renders a graph with Run. Save reusable .ts files through ordinary file operations in the workspace or the Host-provided workflow library directory. workflow_run accepts exactly one of path (workspace-relative or absolute .ts file), name (a library entry), or script (one-time source), plus an explicit input object. It validates before execution; correct the returned line/column diagnostics and run again. No separate inspect or save tool is needed. Static validation checks the supported authoring contract, not business correctness; review branch behavior, cancellation and side effects as described in recovery.md.
 
 Generic retrieval example:
 

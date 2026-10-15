@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { z } from 'zod'
-import { toolDenied, toolError, type AgentContext, type AgentHooks, type AgentPlugin, type AgentRunOutcome, type BeforeToolDecision, type ToolCall } from '@quifox/agent-core'
+import { toolDenied, toolError, type AgentContext, type AgentHooks, type AgentPlugin, type AgentRunOutcome, type BeforeToolDecision, type ToolCall, type ToolResult } from '@quifox/agent-core'
 import type { ChatInput } from '@quifox/agent-plugin-session'
 import type { ToolInspection } from './tool-presentation.js'
 import { FileAccessError } from './tool-presentation.js'
@@ -14,6 +14,7 @@ export interface PermissionGateOptions {
     signal(): AbortSignal | undefined
     operationId(call: ToolCall): string
     onRequest(request: ApprovalRequest): void
+    preparedTools?: readonly string[]
 }
 interface ApprovalAnswer { approved: boolean; feedback?: string }
 interface Pending { request: ApprovalRequest; resolve(answer: ApprovalAnswer): void }
@@ -37,19 +38,30 @@ export class PermissionGate implements AgentPlugin<ChatInput> {
             beforeTool: async (ctx, call) => this.authorize(ctx, call),
             onRunEnd: async (_ctx, outcome) => { if (this.active === outcome) { this.close(); this.active = undefined } }
         }
-        this.guard = { id: 'host-permissions-guard', hooks: { beforeTool: async (ctx, call) => {
-            if (this.options.allowed && !this.options.allowed(call.name)) return { action: 'result', result: toolDenied('当前 Agent 权限不允许该工具。', { code: 'TOOL_PERMISSION_DENIED' }) }
-            const tool = ctx.tools.get(call.name)
-            if (tool && !tool.inputSchema.safeParse(call.input).success) return { action: 'result', result: toolError('工具参数不符合声明。', { code: 'TOOL_INPUT_INVALID' }) }
-            let inspection: ToolInspection | undefined
-            try { inspection = await this.options.inspect?.(call, ctx) } catch (cause) { if (cause instanceof FileAccessError) return { action: 'result', result: cause.result }; throw cause }
-            if (!this.requiresApproval(ctx, call, inspection)) return { action: 'continue' }
-            const operation = this.options.operationId(call)
-            const granted = this.grants.get(operation)
-            this.grants.delete(operation)
-            return granted === fingerprint(call) + (inspection?.authorizationIdentity ?? '') ? { action: 'continue' } : { action: 'result', result: toolDenied(
-                '工具身份或参数已变化，需要重新批准。', { code: 'AUTHORIZATION_CHANGED' }) }
-        } } }
+        this.guard = { id: 'host-permissions-guard', hooks: { beforeTool: async (ctx, call) => this.verify(ctx, call) } }
+    }
+
+    /** @param ctx - Tool owner. @param call - Private prepared operation, including its original call identity. */
+    async authorizePrepared(ctx: AgentContext, call: ToolCall): Promise<ToolResult | undefined> {
+        const decision = await this.authorize(ctx, call, true)
+        if (decision.action === 'result') return decision.result
+        const verified = await this.verify(ctx, call, true)
+        return verified.action === 'result' ? verified.result : undefined
+    }
+
+    private async verify(ctx: AgentContext, call: ToolCall, prepared = false): Promise<BeforeToolDecision> {
+        if (this.options.allowed && !this.options.allowed(call.name)) return { action: 'result', result: toolDenied('当前 Agent 权限不允许该工具。', { code: 'TOOL_PERMISSION_DENIED' }) }
+        const tool = ctx.tools.get(call.name)
+        if (tool && !tool.inputSchema.safeParse(call.input).success) return { action: 'result', result: toolError('工具参数不符合声明。', { code: 'TOOL_INPUT_INVALID' }) }
+        if (!prepared && this.options.preparedTools?.includes(call.name)) return { action: 'continue' }
+        let inspection: ToolInspection | undefined
+        try { inspection = await this.options.inspect?.(call, ctx) } catch (cause) { if (cause instanceof FileAccessError) return { action: 'result', result: cause.result }; throw cause }
+        if (!this.requiresApproval(ctx, call, inspection)) return { action: 'continue' }
+        const operation = this.options.operationId(call)
+        const granted = this.grants.get(operation)
+        this.grants.delete(operation)
+        return granted === fingerprint(call) + (inspection?.authorizationIdentity ?? '') ? { action: 'continue' } : { action: 'result', result: toolDenied(
+            '工具身份或参数已变化，需要重新批准。', { code: 'AUTHORIZATION_CHANGED' }) }
     }
 
     get pending(): ApprovalRequest[] { return [...this.requests.values()].map(item => structuredClone(item.request)) }
@@ -76,12 +88,13 @@ export class PermissionGate implements AgentPlugin<ChatInput> {
         return (ctx.tools.policy(call.name)?.approval === 'host' || !!inspection?.requiresApproval) && this.options.mode() !== 'allow'
     }
 
-    private async authorize(ctx: AgentContext, call: ToolCall): Promise<BeforeToolDecision> {
+    private async authorize(ctx: AgentContext, call: ToolCall, prepared = false): Promise<BeforeToolDecision> {
         if (this.options.allowed && !this.options.allowed(call.name)) return { action: 'result', result: toolDenied('当前 Agent 权限不允许该工具。', { code: 'TOOL_PERMISSION_DENIED' }) }
         const tool = ctx.tools.get(call.name)
         if (tool && !tool.inputSchema.safeParse(call.input).success) {
             return { action: 'result', result: toolError('工具参数不符合声明。', { code: 'TOOL_INPUT_INVALID' }) }
         }
+        if (!prepared && this.options.preparedTools?.includes(call.name)) return { action: 'continue' }
         let inspection: ToolInspection | undefined
         try { inspection = await this.options.inspect?.(call, ctx) } catch (cause) { if (cause instanceof FileAccessError) return { action: 'result', result: cause.result }; throw cause }
         if (!this.requiresApproval(ctx, call, inspection)) return { action: 'continue' }
