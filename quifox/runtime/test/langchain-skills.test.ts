@@ -31,17 +31,21 @@ it('preserves pinned Skill bytes when Git checks out files with Windows newline 
 })
 
 it('installs a Skill-only LangChain plugin with readable references and removes its catalog on disable', async () => {
-    const fixture = await synthetic((_request, index) => index === 1 ? { calls: [{ id: 'reference', name: 'skill_read', input: { skill: 'langgraph-fundamentals', path: 'references/typescript.md' } }] } : { text: 'skill loaded' })
+    let referencePath = ''
+    const fixture = await synthetic((_request, index) => index === 1 ? { calls: [{ id: 'reference', name: 'run_command', input: { command: `cat ${JSON.stringify(referencePath)}` } }] } : { text: 'skill loaded' })
     try {
         const before = await fixture.runtime.command({ type: 'resources' }) as ResourceView
         expect(before.skills.skills.some(skill => skill.name === 'langgraph-fundamentals')).toBe(false)
         await fixture.runtime.command({ type: 'plugin-install', pluginId: 'langchain', action: 'install', scope: 'global' })
         const session = await fixture.runtime.command({ type: 'create' }) as SessionView
         expect(session.skills.skills.map(skill => skill.name)).toEqual(expect.arrayContaining(['langgraph-fundamentals', 'langgraph-persistence', 'langgraph-human-in-the-loop', 'langgraph-cli', 'langgraph-typescript-quickstart', 'workflow-production-design', 'workflow-release-checklist']))
+        const skillPath = session.skills.skills.find(skill => skill.name === 'langgraph-fundamentals')!.path
+        referencePath = join(skillPath, '..', 'references', 'typescript.md')
+        expect(await readFile(skillPath, 'utf8')).toContain('StateGraph')
         await fixture.runtime.command({ type: 'submit', sessionId: session.id, prompt: '$langgraph-fundamentals use TypeScript' }); await fixture.runtime.waitForIdle(session.id)
         expect(JSON.stringify(fixture.requests[0]!.messages)).toContain('StateGraph')
         const reference = await readFile(new URL('../skills/langchain/langgraph-fundamentals/references/typescript.md', import.meta.url), 'utf8')
-        expect(fixture.requests[1]!.messages.find(message => message.role === 'tool')?.content).toBe(reference)
+        expect(JSON.parse(fixture.requests[1]!.messages.find(message => message.role === 'tool')!.content).stdout.trimEnd()).toBe(reference.trimEnd())
         expect(fixture.requests[0]!.tools.some(tool => tool.function.name.startsWith('langchain_'))).toBe(false)
         await fixture.runtime.command({ type: 'plugin-set-enabled', pluginId: 'langchain', scope: 'global', enabled: false })
         const after = await fixture.runtime.command({ type: 'resources' }) as ResourceView

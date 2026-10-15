@@ -135,7 +135,7 @@ it('stops background waits promptly, cancels their operation and preserves paire
         return originalWait.apply(this, args)
     })
     const fixture = await synthetic((request, index) => {
-        if (index === 1) return { calls: [{ id: 'background', name: 'run_command', input: { command: 'node -e "setTimeout(() => {}, 30000)"', background: true } }] }
+        if (index === 1) return { calls: [{ id: 'background', name: 'run_command', input: { command: 'node -e "setTimeout(() => {}, 30000)"', timeoutMs: 0 } }] }
         if (index === 2) {
             const result = [...request.messages].reverse().find(message => message.role === 'tool')!
             return { calls: [{ id: 'wait', name: 'task_wait', input: { taskId: JSON.parse(result.content).taskId, timeoutMs: 30000 } }] }

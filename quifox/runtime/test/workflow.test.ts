@@ -9,6 +9,23 @@ import { tmpdir } from 'node:os'
 import { workflowJournal } from '../src/workflow-journal.js'
 import { request as httpRequest } from 'node:http'
 
+it('runs a saved script file and lets the model repair a validation error without ending the conversation', async () => {
+    const fixture = await synthetic((_request, index) => index === 1 ? { calls: [{ id: 'invalid', name: 'workflow_run', input: { script: 'return missingName;' } }] } :
+        index === 2 ? { calls: [{ id: 'valid-file', name: 'workflow_run', input: { path: 'review.ts', input: {} } }] } : { text: 'finished' }, config => { config.approval = 'allow' })
+    try {
+        await writeFile(join(fixture.root, 'review.ts'), 'return "actual-from-file";')
+        const session = await fixture.runtime.command({ type: 'create' }) as SessionView
+        await fixture.runtime.command({ type: 'submit', sessionId: session.id, prompt: 'run a file' }); await fixture.runtime.waitForIdle(session.id)
+        expect(fixture.requests).toHaveLength(3)
+        expect(fixture.requests[0]!.tools.map(tool => tool.function.name)).toContain('workflow_run')
+        expect(fixture.requests[0]!.tools.map(tool => tool.function.name)).not.toContain('workflow_inspect')
+        expect(fixture.requests[0]!.tools.map(tool => tool.function.name)).not.toContain('workflow_save')
+        expect(fixture.requests[1]!.messages.at(-1)?.content).toContain('missingName')
+        expect(fixture.requests[2]!.messages.at(-1)?.content).toBe('actual-from-file')
+        expect((await fixture.runtime.command({ type: 'snapshot', sessionId: session.id }) as SessionView).status).toBe('idle')
+    } finally { await fixture.close() }
+})
+
 it('lowers shorthand input properties and preserves locally shadowed input names', async () => {
     expect(await runWorkflow({ script: 'return { args };', args: { question: 'input' }, ask: async () => 'unused' })).toEqual({ args: { question: 'input' } })
     expect(await runWorkflow({ script: 'const args = "local"; return { args };', args: { question: 'input' }, ask: async () => 'unused' })).toEqual({ args: 'local' })

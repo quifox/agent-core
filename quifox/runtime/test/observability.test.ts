@@ -54,7 +54,7 @@ it('persists run metrics and request composition and folds them after a Host res
         expect(first.runs[0]).toMatchObject({ status: 'success', modelCalls: 1, toolCalls: 0 })
         expect(first.runs[0]!.composition?.plugins.map(plugin => plugin.id)).toContain('observability')
         expect(first.runs[0]!.composition?.context.some(item => item.key === 'project-guidance' && item.content.includes('SYNTHETIC_GUIDANCE'))).toBe(true)
-        expect(first.runs[0]!.composition?.tools.map(tool => tool.name)).toContain('read_file')
+        expect(first.runs[0]!.composition?.tools.map(tool => tool.name)).toContain('run_command')
         expect(JSON.stringify(first)).not.toContain('synthetic-key')
 
         await fixture.restart()

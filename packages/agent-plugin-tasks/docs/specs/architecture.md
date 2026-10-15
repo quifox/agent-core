@@ -1,6 +1,6 @@
 # 后台任务
 
-独立后台任务插件提供提交能力，以及普通 task_get/task_wait/task_cancel 工具。Tool.execute 的 Promise 仍由原 Core 执行；提交工具返回任务身份，任务在插件中运行，不改变默认串行循环。
+独立后台任务插件提供提交能力，以及普通 task_wait/task_cancel 工具；task_wait(timeoutMs: 0) 立即读取当前事实，省略时有界等待。工具可用时通过 Host 提供的上下文 writer 追加简短用法。Tool.execute 的 Promise 仍由原 Core 执行；提交工具返回任务身份，任务在插件中运行，不改变默认串行循环。内部 get 观察接口保留。
 
 - 每个任务归属于提交它的长期 Agent Context；其他 Agent 不能查询或控制该任务。插件可在明确组合中复用，状态隔离仍由 owner 身份决定。
 - 提交立即返回身份；running 表示操作尚无最终回执，completed 保存真实 ToolResult，failed 保存执行异常的公开文案。业务 ToolResult 为 error/denied 也属于已取得真实回执，不伪装成未执行。

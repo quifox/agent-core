@@ -14,6 +14,7 @@ export interface ToolInspection {
 export function toolSummary(call: Pick<ToolCall, 'name' | 'input'>): string {
     const input = call.input && typeof call.input === 'object' ? call.input as Record<string, unknown> : {}
     const path = typeof input.path === 'string' ? input.path : '文件'
+    // Keep historical journal events readable after their tool registrations have been removed.
     if (call.name === 'read_file') return `读取 ${path}`
     if (call.name === 'open_view') return `展示 ${String(input.target ?? '文件')}`
     if (call.name === 'list_files') return `查看 ${typeof input.path === 'string' ? input.path : '工作目录'}`

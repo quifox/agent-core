@@ -1,5 +1,19 @@
 # QuiFox 共享 Host
 
+## 编程工具与插件提示
+
+原生工具仅向模型提供 run_command 与 apply_patch；保留现有精确文本替换语义，不将 apply_patch 宣称为其他工具的补丁格式。文件读取、目录枚举与脚本写入通过命令完成。run_command 的 prepare 校验并规范化实际工作目录、解析命令并请求 Host 授权；角色准入仍在 beforeTool，最终命令只审批一次。Bash 解析与保守执行策略参考 Codex，复杂或无法完整解析的语法不自动获得只读豁免；分类不等同 OS 沙箱，其他 shell 保守审批。
+
+run_command.timeoutMs 为首次等待窗口，默认 10,000 ms，支持 0–300,000 ms；等待结束后返回同一任务身份，原进程继续运行，不杀进程或重复启动。快速完成返回真实工具结果；后台异常与取消仍保留真实事实。取消覆盖前台等待及后台操作，Host 关闭继续收口进程。禁用后台任务能力时不注册依赖它的 run_command。
+
+各插件用已有请求上下文通道提供简短使用约定，按最终可用工具生成，每轮重建，不持久追加到历史。技能目录提供真实 SKILL.md 路径，skill_list 重新扫描；插件附带技能展开到应用私有资料目录供普通命令读取。工作流模型工具仅 workflow_run，可加载命名库、工作目录相对/绝对 .ts 文件或一次性脚本；保存通过普通文件操作，GUI 保存、图分析与运行前校验仍由 Host 提供。校验失败在启动脚本/Agent 前返回带位置的工具错误。memory_note 与 apply_patch 本轮保留。
+
+安全策略锚点为 [Codex Bash parser，commit 740e5af](https://github.com/openai/codex/blob/740e5af33c71225640e0c1c1555c514c2c93ab74/codex-rs/shell-command/src/bash.rs) 的 literal-command 边界，独立实现策略，不复制其 Rust 源码或无沙箱时的自动放行决策。分词使用 [shell-quote 1.12.0](https://github.com/ljharb/shell-quote)（MIT、内置类型、无运行时依赖），不把 tokenizer 当作完整 Shell AST。第一版仅对单条字面只读命令及明确参数白名单提供免审；复合命令、重定向、展开、wrapper、解释器与未知选项均审批。读取目标需位于工作目录范围，符号链接解析到范围外同样审批；可执行程序的 PATH 解析不能落入项目目录或任意非受信目录。未提供任意 Shell 的只读隔离保证。
+
+Agent 定义中的旧 Read/Write/Glob 名称不自动映射为权限更大的 run_command；迁移时明确使用实际工具名，Bash/Edit/Agent 的现有别名继续指向对应工具。
+
+plan 角色可保留 run_command 作为文件读取入口，仍按 deny 策略执行 prepare 检查，只允许通过只读分类的命令；写入、复杂或未知命令直接拒绝，不弹审批，也不能通过会话配置升权。此约束同时覆盖主会话与子 Agent，继承的工具范围仍取交集。
+
 ## TypeScript 工作流
 
 工作流由独立 WorkflowToolsPlugin 与 WorkflowModelPlugin 接入；Host 拥有脚本库、编译、子进程与 Agent 装配。私有应用包 workflow-engine 派生自 ZCode，固定来源版本并保留 Apache-2.0 LICENSE/NOTICE；不修改 Core。脚本使用普通 TypeScript 与 agent().ask()；具名方法必须使用 JSDoc `@node` 或 `@phase` 提供节点标签。匿名回调可作为所属节点的实现细节；入口自动成为根节点。图从同一 TypeScript Program 的 AST/类型符号解析调用关系，不要求作者编写边、节点身份或独立图定义。
@@ -10,7 +24,7 @@
 
 脚本库位于应用资料根 workflows/*.ts；保存前检查，名称限制为单层文件名，读写拒绝符号链接。已有会话固定保存其所运行脚本，更新文件不静默改变历史会话。每次工作流回合创建空上下文的内部 Agent，同一 actor 的多次 ask 复用该回合的会话；外层会话只把 user/assistant 输入输出传入 args.messages。内部 Agent 复用共享 Host 的模型、授权、工具、观察与持久化，不能递归启动工作流或子 Agent，工具权限不能超过外层。
 
-工作流插件绑定 typescript-workflows Skill，由既有 Skills catalog 自动发现；skill_load 渐进加载正文，skill_read 读取动态业务插件目录、恢复说明与模板，基础设施不重复展示。通用 KnowledgePlugin 暴露 knowledge_retrieve，Host 注入本地 Mock 检索回调，不绑定外部后端、连接或密钥。Mock 插件默认不安装；显式安装启用后可直接调用，也可通过 agent(name, {plugins:["knowledge"]}) 使用。示例按固定中英文关键词匹配合成资料，可按 documentIds 缩小范围，资料与来源明确标记 Mock；未匹配返回空结果，不伪装真实检索质量。tools 可缩小内部 Agent 的工具范围，但不能扩大父权限。脚本不接触密钥、Node 模块或 fetch。运行事件沿已有 Session journal 保存并投影节点状态；停止覆盖子进程与所有内部工具。脚本执行隔离用于本地受信工作流，不承诺 Node VM 是安全边界。
+工作流插件绑定 typescript-workflows Skill，由既有 Skills catalog 自动发现；通过目录中的真实路径渐进读取正文、动态业务插件目录、恢复说明与模板，基础设施不重复展示。通用 KnowledgePlugin 暴露 knowledge_retrieve，Host 注入本地 Mock 检索回调，不绑定外部后端、连接或密钥。Mock 插件默认不安装；显式安装启用后可直接调用，也可通过 agent(name, {plugins:["knowledge"]}) 使用。示例按固定中英文关键词匹配合成资料，可按 documentIds 缩小范围，资料与来源明确标记 Mock；未匹配返回空结果，不伪装真实检索质量。tools 可缩小内部 Agent 的工具范围，但不能扩大父权限。脚本不接触密钥、Node 模块或 fetch。运行事件沿已有 Session journal 保存并投影节点状态；停止覆盖子进程与所有内部工具。脚本执行隔离用于本地受信工作流，不承诺 Node VM 是安全边界。
 
 引擎检查点保存到资料根 workflow-runs，节点结果写入并 fsync 后才向脚本返回，按脚本、输入身份与原 actor 身份恢复。恢复从入口重放确定性控制流，已完成节点复用原结果；内部 Agent 接回自己的 Session。未知工具结果由既有 replan 补齐未知/打断回执，不静默重试副作用，不承诺外部 exactly-once。本地检查点不包含任意 JavaScript 堆，模板应使用稳定 args 和具名 actor；无相应业务幂等协议的写入不能靠模板宣称安全。模板包含只读检索重试与并行汇合，当前恢复与平台故障边界通过真实行为测试单独验证。
 

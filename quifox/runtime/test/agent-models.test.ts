@@ -20,7 +20,7 @@ it('uses high only for declared capabilities and disables DeepSeek thinking with
 
 it('persists explicit session approval independently of global defaults without expanding role tools', async () => {
     const fixture = await synthetic(input => input.messages.at(-1)?.role === 'user' ?
-        { calls: [{ id: 'write', name: 'write_file', input: { path: 'session-access.txt', content: 'allowed' } }] } : { text: 'done' })
+        { calls: [{ id: 'write', name: 'apply_patch', input: { path: 'session-access.txt', oldText: '', newText: 'allowed' } }] } : { text: 'done' })
     try {
         const allowed = await fixture.runtime.command({ type: 'create', approvalMode: 'allow' }) as SessionView
         const ordinary = await fixture.runtime.command({ type: 'create' }) as SessionView
@@ -61,6 +61,38 @@ it('uses the assigned child model profile default instead of the parent automati
     } finally { await fixture.close() }
 })
 
+it('lets plan roles read through checked commands while denying writes in main and child sessions', async () => {
+    const fixture = await synthetic(request => request.messages.at(-1)?.content === 'inspect safely' ? { calls: [
+        { id: 'read', name: 'run_command', input: { command: 'cat source.txt' } },
+        { id: 'write', name: 'run_command', input: { command: 'touch must-not-exist' } }
+    ] } : request.messages.at(-1)?.content === 'delegate inspection' ? { calls: [
+        { id: 'delegate', name: 'subagent_start', input: { agent: 'planner', prompt: 'inspect safely' } }
+    ] } : { text: 'done' })
+    try {
+        await mkdir(join(fixture.root, 'agents'), { recursive: true })
+        await writeFile(join(fixture.root, 'agents', 'planner.md'), '---\nname: planner\ndescription: Read-only planner\ntools: Bash\npermissionMode: plan\n---\nInspect without changes.')
+        await writeFile(join(fixture.root, 'source.txt'), 'readable in plan mode')
+        const planner = await fixture.runtime.command({ type: 'create', agent: 'planner' }) as SessionView
+        await fixture.runtime.command({ type: 'submit', sessionId: planner.id, prompt: 'inspect safely' }); await fixture.runtime.waitForIdle(planner.id)
+        const parent = await fixture.runtime.command({ type: 'create' }) as SessionView
+        await fixture.runtime.command({ type: 'submit', sessionId: parent.id, prompt: 'delegate inspection' }); await fixture.runtime.waitForIdle(parent.id)
+        const snapshot = await fixture.runtime.command({ type: 'snapshot' }) as { sessions: SessionView[] }
+        const child = snapshot.sessions.find(session => session.parentId === parent.id)!
+        await fixture.runtime.waitForIdle(child.id)
+        const requests = fixture.requests.filter(request => request.messages.at(-1)?.content === 'inspect safely')
+        expect(requests).toHaveLength(2)
+        for (const request of requests) expect(request.tools.map(tool => tool.function.name)).toEqual(['run_command'])
+        for (const id of [planner.id, child.id]) {
+            const view = await fixture.runtime.command({ type: 'snapshot', sessionId: id }) as SessionView
+            expect(view.messages.filter(item => item.message.role === 'tool').map(item => item.message.content)).toEqual([
+                expect.stringContaining('readable in plan mode'), expect.stringContaining('不允许需要审批')
+            ])
+            expect(view.approvals).toHaveLength(0)
+        }
+        await expect(readFile(join(fixture.root, 'must-not-exist'))).rejects.toMatchObject({ code: 'ENOENT' })
+    } finally { await fixture.close() }
+})
+
 it('selects a named Chat model and reasoning effort for one session without changing another session', async () => {
     const fixture = await synthetic(() => ({ text: 'model reply' }))
     try {
@@ -79,12 +111,12 @@ it('selects a named Chat model and reasoning effort for one session without chan
 
 it('applies an Agent Markdown model default and hides denied tools while preserving parent permissions', async () => {
     const fixture = await synthetic((input, index) => index === 1 ? { calls: [{ id: 'start', name: 'subagent_start', input: { agent: 'reviewer', prompt: 'review only' } }] } :
-        input.messages.at(-1)?.content === 'review only' ? { calls: [{ id: 'write', name: 'write_file', input: { path: 'must-not-write.txt', content: 'denied' } }] } : { text: 'done' })
+        input.messages.at(-1)?.content === 'review only' ? { calls: [{ id: 'write', name: 'apply_patch', input: { path: 'must-not-write.txt', oldText: '', newText: 'denied' } }] } : { text: 'done' })
     try {
         const config = await loadConfig(fixture.root, fixture.root, {})
         await fixture.runtime.command({ type: 'config', patch: { models: [{ ...config.model, id: 'review-model', model: 'synthetic-review' }] } })
         await mkdir(join(fixture.root, 'agents'), { recursive: true })
-        await writeFile(join(fixture.root, 'agents', 'reviewer.md'), '---\nname: reviewer\ndescription: Independent reviewer\nmodel: review-model\ntools: Read, Write\ndisallowedTools: Write\npermissionMode: default\n---\nFollow the original requirements and only review.')
+        await writeFile(join(fixture.root, 'agents', 'reviewer.md'), '---\nname: reviewer\ndescription: Independent reviewer\nmodel: review-model\ntools: skill_list, Edit\ndisallowedTools: Edit\npermissionMode: default\n---\nFollow the original requirements and only review.')
         const parent = await fixture.runtime.command({ type: 'create' }) as SessionView
         await fixture.runtime.command({ type: 'submit', sessionId: parent.id, prompt: 'run reviewer' }); await fixture.runtime.waitForIdle(parent.id)
         const snapshot = await fixture.runtime.command({ type: 'snapshot' }) as { sessions: SessionView[] }
@@ -92,7 +124,7 @@ it('applies an Agent Markdown model default and hides denied tools while preserv
         await fixture.runtime.waitForIdle(child.id)
         const requests = fixture.requests.filter(input => input.model === 'synthetic-review')
         expect(requests.length).toBeGreaterThan(0)
-        expect(requests[0]?.tools.map(item => item.function.name)).toEqual(['read_file'])
+        expect(requests[0]?.tools.map(item => item.function.name)).toEqual(['skill_list'])
         expect(requests[0]?.messages.some(message => message.content.includes('only review'))).toBe(true)
         expect((await fixture.runtime.command({ type: 'snapshot', sessionId: child.id }) as SessionView).messages.some(item => item.message.role === 'tool' && item.message.content.includes('权限'))).toBe(true)
     } finally { await fixture.close() }
@@ -121,9 +153,9 @@ it('applies tightened role permissions after recomposition and passes the effect
     try {
         await mkdir(join(fixture.root, 'agents'), { recursive: true })
         const role = join(fixture.root, 'agents', 'controller.md')
-        await writeFile(role, '---\nname: controller\ndescription: Controller\ntools: Read, Bash, Agent\n---\nDelegate with the allowed tools.')
+        await writeFile(role, '---\nname: controller\ndescription: Controller\ntools: skill_list, Bash, Agent\n---\nDelegate with the allowed tools.')
         const parent = await fixture.runtime.command({ type: 'create', agent: 'controller' }) as SessionView
-        await writeFile(role, '---\nname: controller\ndescription: Controller\ntools: Read, Agent\ndisallowedTools: Bash\n---\nDelegate without shell access.')
+        await writeFile(role, '---\nname: controller\ndescription: Controller\ntools: skill_list, Agent\ndisallowedTools: Bash\n---\nDelegate without shell access.')
         await fixture.runtime.command({ type: 'config', patch: { approval: 'allow' } })
         await fixture.runtime.command({ type: 'submit', sessionId: parent.id, prompt: 'delegate after tightening' }); await fixture.runtime.waitForIdle(parent.id)
         const snapshot = await fixture.runtime.command({ type: 'snapshot' }) as { sessions: SessionView[] }
@@ -132,14 +164,14 @@ it('applies tightened role permissions after recomposition and passes the effect
         expect(fixture.requests[0]?.tools.map(tool => tool.function.name)).not.toContain('run_command')
         const childRequest = fixture.requests.find(request => request.messages.at(-1)?.content === 'child request')!
         expect(childRequest.tools.map(tool => tool.function.name)).not.toContain('run_command')
-        expect(childRequest.tools.map(tool => tool.function.name)).toEqual(['read_file'])
+        expect(childRequest.tools.map(tool => tool.function.name)).toEqual(['skill_list'])
     } finally { await fixture.close() }
 })
 
 it('tightens existing role and child sessions when the user changes automatic authorization back to ask', async () => {
     const fixture = await synthetic(input => input.messages.at(-1)?.content === 'preserve a child' ?
         { calls: [{ id: 'start', name: 'subagent_start', input: {} }] } : input.messages.at(-1)?.role === 'user' ?
-            { calls: [{ id: 'write', name: 'write_file', input: { path: 'approval-ceiling.txt', content: 'requires current approval' } }] } : { text: 'done' }, config => { config.approval = 'allow' })
+            { calls: [{ id: 'write', name: 'apply_patch', input: { path: 'approval-ceiling.txt', oldText: '', newText: 'requires current approval' } }] } : { text: 'done' }, config => { config.approval = 'allow' })
     try {
         await mkdir(join(fixture.root, 'agents'), { recursive: true })
         await writeFile(join(fixture.root, 'agents', 'controller.md'), '---\nname: controller\ndescription: Controller\n---\nUse the current approval policy.')

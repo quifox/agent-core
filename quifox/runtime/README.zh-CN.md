@@ -48,7 +48,7 @@ Skills 使用标准 `.agents/skills/<name>/SKILL.md` 与 quifox 技能目录，�
 
 项目 MCP 需要在设置中授权；未授权或发现失败的 server 不阻断普通工具，并显示实际状态。闲置时连接/重试会重新装配工具目录；退出等待连接与尚未完成的握手清理。
 
-Memory 复用已有两阶段插件，原文、摘要与临时请求上下文分开。后台命令返回供 `task_get/wait/cancel` 使用的任务 ID。`subagent_start` 默认空历史，显式 `mode: "fork"` 才复制父安全前缀；无 prompt 创建待机子会话，有 prompt 则异步启动。QuiFox 只允许一层子 Agent，子请求不装配创建工具。wait 返回实际任务身份，text 保留子回复原文。恢复后的未知工作需要检查子会话。原生取消不能证明副作用已回滚。
+Memory 复用已有两阶段插件，保留用户明确要求的记忆备注，原文、摘要与临时请求上下文分开。run_command 通过原生 shell 完成读取、列目录与编辑；apply_patch 保留精确文本替换。命令等待 timeoutMs（默认 10000 ms，可配置为 0–300000），未完成时返回同一任务 ID 并继续运行，使用 task_wait 等待或 task_cancel 取消；task_wait 的零超时立即查询。等待超时不终止进程。命令准备阶段执行保守风险检查与 Host 授权，不等同沙箱。`subagent_start` 默认空历史，显式 `mode: "fork"` 才复制父安全前缀；无 prompt 创建待机子会话，有 prompt 则异步启动。QuiFox 只允许一层子 Agent，子请求不装配创建工具。wait 返回实际任务身份，text 保留子回复原文。恢复后的未知工作需要检查子会话。原生取消不能证明副作用已回滚。
 
 创建命令可带 UUID `sessionId`，提交可带稳定 `messageId`，用于回执丢失后的同身份重试；参数冲突明确拒绝，避免重复会话或输入。
 

@@ -2,7 +2,7 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-WorkflowModelPlugin supplies a model turn from a Host-injected workflow executor. WorkflowToolsPlugin exposes inspect, save and run tools. The package has no filesystem, compiler or network dependency; QuiFox's shared runtime owns those boundaries.
+WorkflowModelPlugin supplies a model turn from a Host-injected workflow executor. WorkflowToolsPlugin exposes only `workflow_run`, accepting a file path, library name or inline source. Save scripts through ordinary file operations; the Host validates before execution and returns `WorkflowInputError` diagnostics for correction. Optional context and Skill paths provide short authoring guidance. The package has no filesystem, compiler or network dependency; QuiFox's shared runtime owns those boundaries.
 
 ```ts
 import { createAgent } from '@quifox/agent-core';

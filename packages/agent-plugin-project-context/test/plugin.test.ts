@@ -6,7 +6,25 @@ import { ContextualChatConversationPlugin, RequestContextPlugin } from '@quifox/
 import { chatModelOptions } from '../../../test/support/chat-model.mjs'
 import { ProjectGuidancePlugin, SkillsPlugin } from '../src/index.js'
 
-it('loads only metadata initially and the selected skill body through the ordinary tool loop', async () => {
+const sourcePath = (_root: string, path: string): string => `/synthetic/skills/${path}`
+
+it('refreshes skills added after discovery through the sole skill_list tool', async () => {
+    const directories = ['first']
+    const skills = new SkillsPlugin({ roots: ['project'], files: { sourcePath, list: async () => directories,
+        metadata: async (_root, path) => `name: ${path.split('/')[0]}\ndescription: Discoverable skill.`, read: async () => 'body' }, context: () => ({ set: () => {} }) })
+    expect((await skills.catalog()).skills).toHaveLength(1)
+    directories.push('second')
+    const ctx = { tools: new ToolRegistry(), plugins: [] }
+    const initialize = skills.hooks.onInitialize
+    if (typeof initialize === 'function') await initialize(ctx)
+    expect(ctx.tools.definitions().map(tool => tool.name)).toEqual(['skill_list'])
+    const tool = ctx.tools.get('skill_list')!
+    const result = await tool.execute(await tool.prepare(ctx, {}), ctx)
+    expect(result.content).toContain('second')
+    expect(JSON.parse(result.content).skills[1].path).toBe('/synthetic/skills/second/SKILL.md')
+})
+
+it('keeps skill bodies out of automatic metadata discovery and exposes only the refresh tool', async () => {
     const requests: ModelRequest[] = []
     const read = vi.fn(async () => '---\nname: code-review\ndescription: Review changes.\n---\nCHECK THE ORIGINAL REQUIREMENT')
     const session = new ChatSessionPlugin({ id: 's', ownerId: 'o' })
@@ -14,19 +32,19 @@ it('loads only metadata initially and the selected skill body through the ordina
     const generation = new ChatModelPlugin({ session: context.source, ...chatModelOptions({ provider: 'test', modelId: 'test', async *stream(request) {
         requests.push(request)
         if (requests.length === 1) {
-            yield { type: 'tool-call', call: { id: 'load', name: 'skill_load', input: { skill: 'code-review' } } }
+            yield { type: 'tool-call', call: { id: 'refresh', name: 'skill_list', input: {} } }
             yield { type: 'finish', reason: 'tool-calls' }
         } else { yield { type: 'text-delta', delta: 'done' }; yield { type: 'finish', reason: 'stop' } }
     } }) })
     const skills = new SkillsPlugin({ roots: ['project'], files: {
-        list: async () => ['code-review'], metadata: async () => 'name: code-review\ndescription: Review changes.', read
+        sourcePath, list: async () => ['code-review'], metadata: async () => 'name: code-review\ndescription: Review changes.', read
     }, context: () => context })
     const conversation = new ContextualChatConversationPlugin({ session, context, generation })
     expect((await createAgent({ plugins: [conversation, skills] }).run({ prompt: 'Review the work' })).ok).toBe(true)
     expect(JSON.stringify(requests[0])).toContain('Review changes.')
     expect(JSON.stringify(requests[0])).not.toContain('CHECK THE ORIGINAL')
-    expect(JSON.stringify(requests[1])).toContain('CHECK THE ORIGINAL')
-    expect(read).toHaveBeenCalledExactlyOnceWith('project', 'code-review/SKILL.md')
+    expect(JSON.stringify(requests[1])).not.toContain('CHECK THE ORIGINAL')
+    expect(read).not.toHaveBeenCalled()
     expect(session.messages.filter(message => message.role === 'system')).toHaveLength(0)
 })
 
@@ -38,7 +56,7 @@ it('loads ordered ancestor guidance with same-scope override and excludes siblin
     }
     const read = vi.fn(async (root: string, path: string) => documents[`${root}/${path}`])
     const plugin = new ProjectGuidancePlugin({ scopes: ['global', 'repo', 'child'],
-        files: { read, list: async () => [], metadata: async () => undefined }, context: () => ({ set: () => {} }) })
+        files: { sourcePath, read, list: async () => [], metadata: async () => undefined }, context: () => ({ set: () => {} }) })
     expect(await plugin.load()).toEqual([
         { root: 'global', path: 'AGENTS.md', content: 'Global instructions' },
         { root: 'repo', path: 'AGENTS.override.md', content: 'Repo override' },
@@ -55,7 +73,7 @@ it('an explicit Host selection loads instructions into temporary request context
     const generation = new ChatModelPlugin({ session: context.source, ...chatModelOptions({ provider: 'test', modelId: 'test', async *stream(request) {
         requests.push(request); yield { type: 'text-delta', delta: 'done' }; yield { type: 'finish', reason: 'stop' }
     } }) })
-    const skills = new SkillsPlugin({ roots: ['project'], files: { list: async () => ['code-review'],
+    const skills = new SkillsPlugin({ roots: ['project'], files: { sourcePath, list: async () => ['code-review'],
         metadata: async () => 'name: code-review\ndescription: Review changes.', read: async () => 'EXPLICIT SKILL INSTRUCTIONS' },
         context: () => context, selected: () => ['code-review'] })
     const conversation = new ContextualChatConversationPlugin({ session, context, generation })
@@ -66,7 +84,7 @@ it('an explicit Host selection loads instructions into temporary request context
 
 it.each(['../other.md', '/etc/file', 'references/../../other', 'references\\file', 'a//b', 'a/./b', 'file:/x', '%2e%2e/file'])('rejects escaped resource %s before file I/O', async path => {
     const read = vi.fn(async () => 'body')
-    const skills = new SkillsPlugin({ roots: ['project'], files: { list: async () => ['valid'], metadata: async () => 'name: valid\ndescription: Valid skill.', read }, context: () => ({ set: () => {} }) })
+    const skills = new SkillsPlugin({ roots: ['project'], files: { sourcePath, list: async () => ['valid'], metadata: async () => 'name: valid\ndescription: Valid skill.', read }, context: () => ({ set: () => {} }) })
     const ctx = { tools: new ToolRegistry(), plugins: [] }
     await skills.load(ctx, 'valid')
     read.mockClear()
@@ -75,7 +93,7 @@ it.each(['../other.md', '/etc/file', 'references/../../other', 'references\\file
 })
 
 it('keeps resource activation isolated across Agents and reports invalid metadata', async () => {
-    const skills = new SkillsPlugin({ roots: ['project'], files: { list: async () => ['valid', 'invalid'], metadata: async (_root, path) => path.startsWith('valid/')
+    const skills = new SkillsPlugin({ roots: ['project'], files: { sourcePath, list: async () => ['valid', 'invalid'], metadata: async (_root, path) => path.startsWith('valid/')
         ? 'name: valid\ndescription: Valid skill.' : 'name: invalid\nname: duplicate\ndescription: Duplicate key.', read: async () => 'resource' }, context: () => ({ set: () => {} }) })
     const one = { tools: new ToolRegistry(), plugins: [] }
     const two = { tools: new ToolRegistry(), plugins: [] }

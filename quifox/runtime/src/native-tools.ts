@@ -1,5 +1,5 @@
 import { spawn, type ChildProcess } from 'node:child_process'
-import { mkdir, readFile, readdir, stat, realpath } from 'node:fs/promises'
+import { mkdir, readFile, stat, realpath } from 'node:fs/promises'
 import { dirname, resolve, basename, relative, isAbsolute, sep } from 'node:path'
 import { createHash } from 'node:crypto'
 import { existsSync } from 'node:fs'
@@ -10,6 +10,7 @@ import type { BackgroundTasksPlugin } from '@quifox/agent-plugin-tasks'
 import { isMissing, writeAtomic } from './config.js'
 import { FileAccessError, toolSummary, type ToolInspection, type FileChange } from './tool-presentation.js'
 import { withGitChanges } from './git-observation.js'
+import { commandIsReadOnly } from './command-safety.js'
 
 export async function canonicalPath(path: string): Promise<string> {
     try { return await realpath(path) } catch (error) {
@@ -34,17 +35,22 @@ function change(path: string, before: string | null, after: string | null): File
 export async function inspectTool(workspace: string, call: { name: string; input: unknown }, readOnly = false): Promise<ToolInspection> {
     try {
     const input = call.input && typeof call.input === 'object' ? call.input as Record<string, unknown> : {}
-    const file = ['read_file', 'list_files', 'write_file', 'apply_patch'].includes(call.name)
+    const file = call.name === 'apply_patch'
     const command = call.name === 'run_command'
-    const inspection: ToolInspection = { summary: toolSummary(call), risk: file && ['write_file', 'apply_patch'].includes(call.name) ? 'write' : command || (!file && !readOnly) ? 'execute' : 'read-only' }
+    const inspection: ToolInspection = { summary: toolSummary(call), risk: file ? 'write' : command || !readOnly ? 'execute' : 'read-only' }
     if (!file && !command) return inspection
     const target = await canonicalPath(resolve(workspace, String(command ? input.cwd ?? '.' : input.path ?? '.')))
     const distance = relative(await realpath(workspace), target)
     if (isAbsolute(distance) || distance === '..' || distance.startsWith(`..${sep}`)) { inspection.risk = 'outside-workspace'; inspection.requiresApproval = true }
     inspection.target = target; inspection.authorizationIdentity = target
-    if (['write_file', 'apply_patch'].includes(call.name)) {
+    if (command) {
+        const safe = await commandIsReadOnly(String(input.command ?? ''), target, workspace)
+        inspection.requiresApproval = !safe
+        if (safe) inspection.risk = 'read-only'
+    }
+    if (file) {
         const before = await optionalFile(target)
-        const after = call.name === 'write_file' ? String(input.content ?? '') : before === null ? String(input.newText ?? '') :
+        const after = before === null ? String(input.newText ?? '') :
             typeof input.oldText === 'string' && input.oldText && before.split(input.oldText).length === 2 ? before.replace(input.oldText, String(input.newText ?? '')) : before
         inspection.change = change(target, before, after)
         inspection.authorizationIdentity += `:${createHash('sha256').update(before ?? 'missing-file').digest('hex')}:${before === null}`
@@ -53,8 +59,13 @@ export async function inspectTool(workspace: string, call: { name: string; input
     } catch (cause) { const result = fileFailure(cause); if (result) throw new FileAccessError(result); throw cause }
 }
 
-export interface NativeToolsOptions { workspace: string; signal(): AbortSignal | undefined; tasks: BackgroundTasksPlugin; backgroundEnabled?: boolean }
-const readPolicy = { sideEffect: 'none', approval: 'none', retrySafe: true } as const
+const commandSchema = z.object({ command: z.string().trim().min(1), cwd: z.string().optional(), timeoutMs: z.number().int().min(0).max(300_000).default(10_000) }).strict()
+interface PreparedCommand { input: z.output<typeof commandSchema>; denied?: ToolResult | undefined }
+export interface NativeToolsOptions {
+    workspace: string; signal(): AbortSignal | undefined; tasks: BackgroundTasksPlugin; backgroundEnabled?: boolean
+    context?(): { set(key: string, content: string): void }
+    authorize(ctx: AgentContext, input: z.output<typeof commandSchema>): Promise<ToolResult | undefined>
+}
 const writePolicy = { sideEffect: 'external', approval: 'host' } as const
 
 /** Files and native processes belong to this Host; every mutation uses the normal permission chain. */
@@ -66,26 +77,6 @@ export function nativeTools(options: NativeToolsOptions): AgentPlugin {
             tool.execute = async (input, context) => { try { return await execute(input, context) } catch (cause) { const result = fileFailure<Data>(cause); if (result) return result; throw cause } }
             ctx.tools.register(tool)
         }
-        registerFile(defineTool({ name: 'read_file', description: 'Read a UTF-8 file using one-based line ranges; truncated output requires a follow-up range.',
-            inputSchema: z.object({ path: z.string().min(1), startLine: z.number().int().positive().default(1), limit: z.number().int().min(1).max(1000).default(200) }).strict(), policy: readPolicy,
-            execute: async input => {
-                const lines = (await readFile(path(input.path), 'utf8')).split('\n')
-                const selected = lines.slice(input.startLine - 1, input.startLine - 1 + input.limit)
-                let content = selected.join('\n'); const byteTruncated = Buffer.byteLength(content) > 200_000
-                if (byteTruncated) content = Buffer.from(content).subarray(0, 200_000).toString('utf8')
-                return toolSuccess(content, { startLine: input.startLine, lines: selected.length, truncated: byteTruncated || input.startLine - 1 + input.limit < lines.length })
-            } }))
-        registerFile(defineTool({ name: 'list_files', description: 'List immediate directory entries with file/directory kinds.',
-            inputSchema: z.object({ path: z.string().default('.') }).strict(), policy: readPolicy,
-            execute: async input => {
-                const entries = await readdir(path(input.path), { withFileTypes: true })
-                const data = entries.slice(0, 1000).map(entry => ({ name: entry.name, kind: entry.isDirectory() ? 'directory' : entry.isSymbolicLink() ? 'symlink' : 'file' }))
-                return toolSuccess(JSON.stringify({ entries: data, truncated: entries.length > data.length }))
-            } }))
-        registerFile(defineTool({ name: 'write_file', description: 'Write exact UTF-8 content atomically. Requires Host approval.',
-            inputSchema: z.object({ path: z.string().min(1), content: z.string() }).strict(), policy: writePolicy,
-            execute: async input => { const target = await canonicalPath(path(input.path)), before = await optionalFile(target); await saveFile(target, input.content);
-                return toolSuccess('File written.', { change: change(target, before, input.content) }) } }))
         registerFile(defineTool({ name: 'apply_patch', description: 'Replace exactly one matching oldText in a file. Empty oldText creates a missing file. Requires Host approval.',
             inputSchema: z.object({ path: z.string().min(1), oldText: z.string(), newText: z.string() }).strict(), policy: writePolicy,
             execute: async input => {
@@ -100,16 +91,34 @@ export function nativeTools(options: NativeToolsOptions): AgentPlugin {
                 const next = original.replace(input.oldText, input.newText)
                 await saveFile(target, next); return toolSuccess('Patch applied.', { change: change(target, original, next) })
             } }))
-        ctx.tools.register(defineTool({ name: 'run_command', description: `Run a native ${process.platform} shell command in the workspace.${options.backgroundEnabled === false ? '' : ' background returns a task identity immediately; use task_get/wait/cancel.'} Cancellation does not imply rollback.`,
-            inputSchema: z.object({ command: z.string().trim().min(1), cwd: z.string().optional(), ...(options.backgroundEnabled === false ? {} : { background: z.boolean().default(false) }),
-                timeoutMs: z.number().int().positive().max(86_400_000).optional() }).strict(), policy: writePolicy,
-            execute: async (input, context: AgentContext) => {
-                const execute = (signal?: AbortSignal): Promise<ToolResult> => withGitChanges(options.workspace, () => runCommand(input.command, path(input.cwd ?? '.'), signal, input.timeoutMs))
-                if (!input.background) return execute(options.signal())
+        if (options.backgroundEnabled === false) return
+        ctx.tools.register(defineTool<typeof commandSchema, unknown, AgentContext, PreparedCommand>({ name: 'run_command', description: `Run a native ${process.platform} shell command. timeoutMs is the initial wait (default 10000, maximum 300000), not an execution deadline. Unfinished commands continue and return a taskId. Cancellation does not roll back effects.`,
+            inputSchema: commandSchema, policy: { sideEffect: 'external', approval: 'none' },
+            prepare: async (ctx, raw) => {
+                const input = commandSchema.parse(raw)
+                try {
+                    input.cwd = await realpath(path(input.cwd ?? '.'))
+                    if (!(await stat(input.cwd)).isDirectory()) return { input, denied: toolError('Command cwd must be a directory.', { code: 'FILE_PATH_INVALID' }) }
+                    return { input, denied: await options.authorize(ctx, input) }
+                } catch (cause) { const denied = fileFailure(cause); if (denied) return { input, denied }; throw cause }
+            },
+            execute: async ({ input, denied }, context) => {
+                if (denied) return denied
+                if (options.signal()?.aborted) return toolError('Command was interrupted before execution.', { code: 'COMMAND_INTERRUPTED' })
+                const execute = (signal?: AbortSignal): Promise<ToolResult> => withGitChanges(options.workspace, () => runCommand(input.command, path(input.cwd ?? '.'), signal))
                 const taskId = options.tasks.submit(context, signal => execute(signal))
+                const snapshot = await options.tasks.wait(context, taskId, input.timeoutMs)
+                if (snapshot?.result) return snapshot.result
+                if (snapshot?.status !== 'running') return toolError('Command did not produce a result; inspect the task and local logs.', { code: 'COMMAND_FAILED', data: snapshot })
                 const receipt = { taskId, status: 'running' }
                 return toolSuccess(JSON.stringify(receipt), receipt)
             } }))
+    }, beforeModel: async ctx => {
+        options.context?.().set('native-tools', [
+            ctx.tools.get('run_command') ? 'Use run_command for reading files, listing directories and editing with shell commands. timeoutMs controls the initial wait (default 10000 ms); unfinished commands continue with a taskId. Commands follow Host permissions.' : '',
+            ctx.tools.get('apply_patch') ? 'apply_patch replaces one exact oldText match; empty oldText creates a missing file. It uses this tool schema, not a unified diff.' : ''
+        ].filter(Boolean).join(' '))
+        return { action: 'continue' }
     } } }
 }
 
@@ -120,7 +129,7 @@ async function saveFile(path: string, content: string): Promise<void> {
 }
 
 /** Spawn uses standard native shell resolution; cancellation waits for close and preserves observed exit/output. */
-export async function runCommand(command: string, cwd: string, signal?: AbortSignal, timeoutMs?: number): Promise<ToolResult> {
+export async function runCommand(command: string, cwd: string, signal?: AbortSignal): Promise<ToolResult> {
     signal?.throwIfAborted()
     return new Promise<ToolResult>((accept, reject) => {
         const executable = basename(process.execPath)
@@ -145,13 +154,12 @@ export async function runCommand(command: string, cwd: string, signal?: AbortSig
             killTimer ??= setTimeout(() => terminate(child, true), 3000)
         }
         signal?.addEventListener('abort', stop, { once: true })
-        const timeout = timeoutMs === undefined ? undefined : setTimeout(stop, timeoutMs)
-        const cleanup = (): void => { signal?.removeEventListener('abort', stop); if (timeout) clearTimeout(timeout); if (killTimer) clearTimeout(killTimer) }
+        const cleanup = (): void => { signal?.removeEventListener('abort', stop); if (killTimer) clearTimeout(killTimer) }
         child.once('error', error => { cleanup(); reject(error) })
         child.once('close', (code, exitSignal) => {
             cleanup()
             const result = { stdout, stderr, exitCode: code, signal: exitSignal, cancelRequested: cancelled, truncated }
-            accept(code === 0 ? toolSuccess(JSON.stringify(result), result) : toolError(JSON.stringify(result), { code: cancelled ? 'COMMAND_INTERRUPTED' : 'COMMAND_FAILED', data: result }))
+            accept(!cancelled && code === 0 ? toolSuccess(JSON.stringify(result), result) : toolError(JSON.stringify(result), { code: cancelled ? 'COMMAND_INTERRUPTED' : 'COMMAND_FAILED', data: result }))
         })
         if (signal?.aborted) stop()
     })

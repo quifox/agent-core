@@ -19,7 +19,7 @@ const server = createServer(async (request, response) => {
     const write = (delta: unknown): void => { response.write(`data: ${JSON.stringify({ choices: [{ delta }] })}\n\n`) }
     const finish = (reason = 'stop'): void => { write({}); response.end(`data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: reason }] })}\n\ndata: [DONE]\n\n`) }
     if (last?.role !== 'tool' && prompt.includes('审批')) {
-        write({ tool_calls: [{ index: 0, id: randomUUID(), type: 'function', function: { name: 'write_file', arguments: JSON.stringify({ path: 'acceptance.txt', content: 'Approved through the actual quifox Host.' }) } }] }); finish('tool_calls')
+        write({ tool_calls: [{ index: 0, id: randomUUID(), type: 'function', function: { name: 'apply_patch', arguments: JSON.stringify({ path: 'acceptance.txt', oldText: '', newText: 'Approved through the actual quifox Host.' }) } }] }); finish('tool_calls')
     } else if (last?.role !== 'tool' && prompt.includes('子智能体')) {
         write({ tool_calls: [{ index: 0, id: randomUUID(), type: 'function', function: { name: 'subagent_start', arguments: '{}' } }] }); finish('tool_calls')
     } else {

@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { analyzeWorkflowScript, createWorkflowProgram, collectSites, synthesizeAskSchemas, buildAskSpecs, lowerWorkflow, collectSitePhases, InMemoryJournalStore, WorkflowError, validate,
     type PersonaSpec, type AskMessage, type InstanceRef, type RunEvent, type SessionRef, type WorkflowDriver, type JournalStorePort } from '@quifox/workflow-engine'
 import { runWorkflowScript } from '@quifox/workflow-engine/runtime'
+import { WorkflowInputError } from '@quifox/agent-plugin-workflow'
 import { workflowCalls } from './workflow-calls.js'
 
 export interface WorkflowGraph {
@@ -45,9 +46,9 @@ export interface WorkflowRunOptions {
 
 export async function runWorkflow(options: WorkflowRunOptions): Promise<unknown> {
     const source = workflowSource(options.script), analysis = inspectWorkflow(options.script)
-    if (!analysis.ok) throw new Error(analysis.diagnostics.map(diagnostic => `${diagnostic.line}:${diagnostic.column} ${diagnostic.message}`).join('\n'))
+    if (!analysis.ok) throw new WorkflowInputError(analysis.diagnostics.map(diagnostic => `${diagnostic.line}:${diagnostic.column} ${diagnostic.message}`).join('\n'))
     const program = createWorkflowProgram(source), table = collectSites(program), schemas = synthesizeAskSchemas(program, table)
-    if (schemas.diagnostics.length) throw new Error(schemas.diagnostics.map(value => value.message).join('\n'))
+    if (schemas.diagnostics.length) throw new WorkflowInputError(schemas.diagnostics.map(value => `${value.line}:${value.column} ${value.message}`).join('\n'))
     const lowered = lowerWorkflow(program, table, workflowCalls(program).bodies)
     const sessions = new Map<string, PersonaSpec>(), controllers = new Map<string, AbortController>(), pending = new Set<Promise<void>>()
     const verdicts = new Map<string, Parameters<WorkflowDriver['respondToSubmit']>[1]>()

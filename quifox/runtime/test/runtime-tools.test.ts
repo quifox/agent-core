@@ -17,7 +17,7 @@ it.each(['queue', 'steer'] as const)('executes an approved original tool, accept
         inputs.push(input)
         requests += 1
         response.writeHead(200, { 'Content-Type': 'text/event-stream' })
-        const delta = requests === 1 ? { tool_calls: [{ index: 0, id: 'original-call', type: 'function', function: { name: 'write_file', arguments: JSON.stringify({ path: 'output.txt', content: 'actual content' }) } }] } :
+        const delta = requests === 1 ? { tool_calls: [{ index: 0, id: 'original-call', type: 'function', function: { name: 'apply_patch', arguments: JSON.stringify({ path: 'output.txt', oldText: '', newText: 'actual content' }) } }] } :
             { content: requests === 2 ? 'written' : 'queued response' }
         response.end(`data: ${JSON.stringify({ choices: [{ delta }] })}\n\ndata: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: requests === 1 ? 'tool_calls' : 'stop' }] })}\n\ndata: [DONE]\n\n`)
     })
@@ -43,9 +43,9 @@ it.each(['queue', 'steer'] as const)('executes an approved original tool, accept
         const view = await runtime.command({ type: 'snapshot', sessionId: session.id }) as SessionView
         expect(view.status).toBe('idle'); expect(requests).toBe(mode === 'queue' ? 3 : 2)
         expect(inputs[1]!.messages.some(message => message.role === 'user' && message.content === 'next turn')).toBe(mode === 'steer')
-        expect(inputs[0]!.tools.some(tool => tool.function.name === 'write_file')).toBe(true)
-        expect(inputs[1]!.messages.some(message => message.role === 'tool' && message.content.includes('File written.'))).toBe(true)
+        expect(inputs[0]!.tools.some(tool => tool.function.name === 'apply_patch')).toBe(true)
+        expect(inputs[1]!.messages.some(message => message.role === 'tool' && message.content.includes('File created.'))).toBe(true)
         expect(view.messages.filter(item => item.message.role === 'user').map(item => item.message.content)).toEqual(['write a file', 'next turn'])
-        expect(view.messages.find(item => item.message.role === 'tool')?.message).toMatchObject({ toolCallId: 'original-call', content: 'File written.' })
+        expect(view.messages.find(item => item.message.role === 'tool')?.message).toMatchObject({ toolCallId: 'original-call', content: 'File created.' })
     } finally { await runtime?.close(); server.close(); await rm(root, { recursive: true, force: true }) }
 })

@@ -6,6 +6,15 @@ import { writeAtomic } from './config.js'
 import { withFileLease } from './leases.js'
 
 export interface WorkflowDocument { name: string; script: string; inspection: WorkflowInspection }
+/** @param path - Explicit local .ts source; links and oversized files are rejected before execution. */
+export async function readWorkflowFile(path: string): Promise<string> {
+    const handle = await open(path, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0))
+    try {
+        const status = await handle.stat()
+        if (!status.isFile() || status.size > 200000 || !path.endsWith('.ts')) throw new Error('Workflow source must be a .ts file of at most 200 KB.')
+        return await handle.readFile('utf8')
+    } finally { await handle.close() }
+}
 export class WorkflowLibrary {
     readonly directory: string
     constructor(root: string) { this.directory = join(root, 'workflows') }

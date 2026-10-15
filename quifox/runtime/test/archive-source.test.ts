@@ -23,7 +23,7 @@ it('reads exact physical JSONL lines while replaying message records with their 
 })
 
 it('searches physical source title and tool arguments with bounded excerpts and exact line references', async () => {
-    const fixture = await synthetic((_input, index) => index === 1 ? { calls: [{ id: 'list', name: 'list_files', input: { path: 'needle-tool-argument' } }] } : { text: 'done' })
+    const fixture = await synthetic((_input, index) => index === 1 ? { calls: [{ id: 'list', name: 'skill_list', input: { query: 'needle-tool-argument' } }] } : { text: 'done' })
     try {
         const session = await fixture.runtime.command({ type: 'create', title: 'needle-title' }) as SessionView
         await fixture.runtime.command({ type: 'submit', sessionId: session.id, prompt: 'inspect tool paths' }); await fixture.runtime.waitForIdle(session.id)

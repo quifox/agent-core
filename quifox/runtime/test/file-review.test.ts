@@ -5,7 +5,7 @@ import type { SessionView } from '../src/protocol.js'
 import { synthetic } from './synthetic.js'
 
 it('shows the real file diff for approval and rejects a source changed while approval was pending', async () => {
-    const fixture = await synthetic((_input, index) => index === 1 ? { calls: [{ id: 'edit', name: 'write_file', input: { path: 'review.txt', content: 'requested\n' } }] } : { text: 'done' })
+    const fixture = await synthetic((_input, index) => index === 1 ? { calls: [{ id: 'edit', name: 'apply_patch', input: { path: 'review.txt', oldText: 'original\n', newText: 'requested\n' } }] } : { text: 'done' })
     try {
         await writeFile(join(fixture.root, 'review.txt'), 'original\n')
         const session = await fixture.runtime.command({ type: 'create' }) as SessionView
@@ -24,9 +24,9 @@ it('shows the real file diff for approval and rejects a source changed while app
 
 it('returns ordinary business errors for missing files and invalid file/directory targets without breaking the tool batch', async () => {
     const fixture = await synthetic((_input, index) => index === 1 ? { calls: [
-        { id: 'directory', name: 'write_file', input: { path: '.', content: 'cannot write a directory' } },
-        { id: 'missing', name: 'read_file', input: { path: 'missing.txt' } },
-        { id: 'not-directory', name: 'list_files', input: { path: 'file.txt' } }
+        { id: 'directory', name: 'apply_patch', input: { path: '.', oldText: '', newText: 'cannot write a directory' } },
+        { id: 'missing', name: 'run_command', input: { command: 'cat missing.txt' } },
+        { id: 'not-directory', name: 'run_command', input: { command: 'pwd', cwd: 'file.txt' } }
     ] } : { text: 'errors observed; choose a valid path next' }, config => { config.approval = 'allow' })
     try {
         await writeFile(join(fixture.root, 'file.txt'), 'file content')

@@ -7,7 +7,7 @@ import { synthetic } from './synthetic.js'
 
 it('identifies recovery by its durable tool batch when a model reuses a call ID', async () => {
     let starts = 0
-    const fixture = await synthetic((_input, index) => index <= 2 ? { calls: [{ id: 'reused', name: 'list_files', input: {} }] } : { text: 'recovered' })
+    const fixture = await synthetic((_input, index) => index <= 2 ? { calls: [{ id: 'reused', name: 'run_command', input: { command: 'pwd' } }] } : { text: 'recovered' })
     try {
         const session = await fixture.runtime.command({ type: 'create' }) as SessionView
         fixture.runtime.subscribe(event => {
@@ -27,8 +27,8 @@ it('identifies recovery by its durable tool batch when a model reuses a call ID'
 
 it.each(['continue', 'replan'] as const)('resumes sealed interrupted tool batches with %s and rejects concurrent resume', async mode => {
     const fixture = await synthetic((_input, index) => index === 1 ? { calls: [
-        { id: 'write-once', name: 'write_file', input: { path: 'receipt.txt', content: 'original effect' } },
-        { id: 'read-original', name: 'read_file', input: { path: 'receipt.txt' } }
+        { id: 'write-once', name: 'apply_patch', input: { path: 'receipt.txt', oldText: '', newText: 'original effect' } },
+        { id: 'read-original', name: 'run_command', input: { command: 'cat receipt.txt' } }
     ] } : { text: 'restored' }, config => { config.approval = 'allow' })
     try {
         const session = await fixture.runtime.command({ type: 'create' }) as SessionView

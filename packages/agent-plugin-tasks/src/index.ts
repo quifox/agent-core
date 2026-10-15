@@ -28,12 +28,10 @@ export class BackgroundTasksPlugin implements AgentPlugin {
     private sequence = 0
 
     /** Register ordinary observation tools; actual operations are injected by the Host. */
-    constructor(private readonly options: { newId?(): string; onTask?(snapshot: BackgroundTaskSnapshot): void; signal?(owner: AgentContext): AbortSignal | undefined } = {}) {
+    constructor(private readonly options: { newId?(): string; onTask?(snapshot: BackgroundTaskSnapshot): void; signal?(owner: AgentContext): AbortSignal | undefined; context?(owner: AgentContext): { set(key: string, content: string): void } } = {}) {
         const inputSchema = z.object({ taskId: z.string().min(1) }).strict()
         const policy = { sideEffect: 'none', approval: 'none' } as const
-        const get = defineTool({ name: 'task_get', description: 'Read the latest facts of a background task.', inputSchema, policy,
-            execute: async (input, ctx) => this.receipt(this.get(ctx, input.taskId)) })
-        const wait = defineTool({ name: 'task_wait', description: 'Wait for a background task; timeout returns its current facts.',
+        const wait = defineTool({ name: 'task_wait', description: 'Observe a background task: timeoutMs: 0 returns immediately; otherwise wait up to timeoutMs (default 10000). Waiting never stops or restarts the operation.',
             inputSchema: inputSchema.extend({ timeoutMs: z.number().int().min(0).max(300_000).optional() }), policy,
             execute: async (input, ctx) => {
                 const signal = this.options.signal?.(ctx), snapshot = await this.wait(ctx, input.taskId, input.timeoutMs, signal)
@@ -42,7 +40,11 @@ export class BackgroundTasksPlugin implements AgentPlugin {
         const cancel = defineTool({ name: 'task_cancel', description: 'Request cancellation; completion does not imply rollback.', inputSchema,
             policy: { sideEffect: 'external', approval: 'none', retrySafe: true },
             execute: async (input, ctx) => this.receipt(this.cancel(ctx, input.taskId)) })
-        this.hooks = { onInitialize: async ctx => { ctx.tools.register(get); ctx.tools.register(wait); ctx.tools.register(cancel) } }
+        this.hooks = { onInitialize: async ctx => { ctx.tools.register(wait); ctx.tools.register(cancel) },
+            beforeModel: async ctx => { this.options.context?.(ctx).set('background-tasks', [
+                ctx.tools.get('task_wait') ? 'Use task_wait with a returned taskId to observe completion; timeoutMs: 0 checks immediately. A wait timeout leaves the operation running.' : '',
+                ctx.tools.get('task_cancel') ? 'Use task_cancel to request cancellation; cancellation does not roll back effects.' : ''
+            ].filter(Boolean).join(' ')); return { action: 'continue' } } }
     }
 
     /**

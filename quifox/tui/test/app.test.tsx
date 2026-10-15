@@ -41,7 +41,7 @@ it('shows directory skills before creating a session and does not invent unknown
     const commands: RuntimeCommand[] = []
     const snapshot: RuntimeSnapshot = { configurationRevision: 'fixture', config: publicConfig(defaultConfig('/synthetic')), sessions: [] }
     const resources: ResourceView = { workspace: '/synthetic', config: snapshot.config, skillsEnabled: true, configSources: [], guidance: [], agents: { agents: [], issues: [] },
-        skills: { skills: [{ id: 'root/review', root: 'root', directory: 'review', name: 'review', description: 'Review a change' }], issues: [] }, memory: { enabled: true, processing: false, content: '', summaries: 0 } }
+        skills: { skills: [{ id: 'root/review', root: 'root', directory: 'review', name: 'review', description: 'Review a change', path: '/synthetic/skills/review/SKILL.md' }], issues: [] }, memory: { enabled: true, processing: false, content: '', summaries: 0 } }
     const runtime: TerminalRuntime = { close: async () => {}, subscribe: () => () => {}, command: async command => {
         commands.push(command); return command.type === 'resources' ? resources : snapshot
     } }
@@ -297,8 +297,8 @@ it('starts a fresh main session and filters slash commands with Tab completion',
     const view: SessionView = { id: 'fresh', title: '新的主会话', workspace: '/synthetic', status: 'idle', updatedAt: '2026-01-01', resumeAvailable: false,
         messages: [], events: [], pendingMessages: [], skills: { skills: [], issues: [] }, guidance: [], backgroundTasks: [], toolStates: [], memory: { enabled: true, processing: false, content: '', summaries: 0 }, approvals: [] }
     const snapshot: RuntimeSnapshot = { configurationRevision: 'fixture', config: publicConfig(defaultConfig('/synthetic')), sessions: [{ ...view, id: 'old-child', title: '不应自动选择的子会话', parentId: 'parent' }] }
-    view.skills.skills = [{ id: 'global/code-review', root: 'global', directory: 'code-review', name: 'code-review', description: 'older skill description' },
-        { id: 'project/code-review', root: 'project', directory: 'code-review', name: 'code-review', description: 'nearest skill description' }]
+    view.skills.skills = [{ id: 'global/code-review', root: 'global', directory: 'code-review', path: '/synthetic/global/code-review/SKILL.md', name: 'code-review', description: 'older skill description' },
+        { id: 'project/code-review', root: 'project', directory: 'code-review', path: '/synthetic/project/code-review/SKILL.md', name: 'code-review', description: 'nearest skill description' }]
     const runtime: TerminalRuntime = { close: async () => {}, subscribe: () => () => {}, command: async command => {
         commands.push(command)
         if (command.type === 'create') { snapshot.sessions.push(view); return structuredClone(view) }
@@ -324,7 +324,7 @@ it('completes a Skill identity and reads persisted observability without creatin
     const commands: RuntimeCommand[] = []
     let listener: ((event: RuntimeEvent) => void) | undefined, running = false
     const view: SessionView = { id: 'observed', title: '观测任务', workspace: '/synthetic', status: 'idle', updatedAt: '2026-01-01', resumeAvailable: false,
-        messages: [], events: [], pendingMessages: [], skills: { skills: [{ id: 'root/review', root: 'root', directory: 'review', name: 'review', description: 'Review source' }], issues: [] },
+        messages: [], events: [], pendingMessages: [], skills: { skills: [{ id: 'root/review', root: 'root', directory: 'review', name: 'review', description: 'Review source', path: '/synthetic/skills/review/SKILL.md' }], issues: [] },
         guidance: [], approvals: [], backgroundTasks: [], toolStates: [], memory: { enabled: false, processing: false, content: '', summaries: 0 } }
     const snapshot: RuntimeSnapshot = { configurationRevision: 'fixture', config: publicConfig(defaultConfig('/synthetic')), sessions: [view] }
     const runtime: TerminalRuntime = { close: async () => {}, subscribe: callback => { listener = callback; return () => { listener = undefined } }, command: async command => {

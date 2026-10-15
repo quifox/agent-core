@@ -11,12 +11,12 @@ import { SubAgentsPlugin, SubAgentRequestError, allocateSubAgentName, subAgentNa
 import { EventPublisherPlugin } from '@quifox/agent-plugin-events'
 import { ObservabilityPlugin, compareObservabilityRuns, foldObservability, type ObservabilityComposition, type ObservabilityEvent } from '@quifox/agent-plugin-observability'
 import { ChatModelPlugin } from '@quifox/agent-plugin-model'
-import { WorkflowModelPlugin, WorkflowToolsPlugin } from '@quifox/agent-plugin-workflow'
+import { WorkflowModelPlugin, WorkflowToolsPlugin, WorkflowInputError } from '@quifox/agent-plugin-workflow'
 import { KnowledgePlugin } from '@quifox/agent-plugin-knowledge'
 import type { PersonaSpec, AskMessage } from '@quifox/workflow-engine'
 import { workflowRunsDir } from '@quifox/workflow-engine/runtime'
 import { inspectWorkflow, runWorkflow } from './workflow.js'
-import { WorkflowLibrary } from './workflow-library.js'
+import { WorkflowLibrary, readWorkflowFile } from './workflow-library.js'
 import { mockRetrieveKnowledge, mockRetrievalDocumentation } from './retrieval.js'
 import { workflowSkillFiles, workflowSkillRoot, workflowResources } from './workflow-skills.js'
 import { workflowJournal } from './workflow-journal.js'
@@ -432,7 +432,7 @@ export class QuiFoxRuntime {
                 const context = (): never => { throw new Error('Resource queries cannot initialize an Agent context.') }
                 const bound = { workflows: pluginEnabled(layered.config, 'workflows'), langchain: pluginEnabled(layered.config, 'langchain') }
                 const hasBound = bound.workflows || bound.langchain
-                const skills = new SkillsPlugin({ files: hasBound ? workflowSkillFiles(project.files, this.workflowDocuments(layered.config).plugins, bound) : project.files, roots: [...project.roots, ...hasBound ? [workflowSkillRoot] : []], context })
+                const skills = new SkillsPlugin({ files: hasBound ? await workflowSkillFiles(project.files, this.workflowDocuments(layered.config).plugins, bound, this.paths.root) : project.files, roots: [...project.roots, ...hasBound ? [workflowSkillRoot] : []], context })
                 const guidance = new ProjectGuidancePlugin({ files: project.files, scopes: project.scopes, context })
                 const agents = await agentCatalog(directory, this.paths.root)
                 const resources = displayValue({ workspace: directory, skills: await skills.catalog(), skillsEnabled: pluginEnabled(layered.config, 'skills'), guidance: (await guidance.load()).map(({ root, path }) => ({ root, path })),
@@ -769,7 +769,7 @@ export class QuiFoxRuntime {
             compaction: (session, model, context) => new ChatCompactionSource(session, model, candidate => estimateChatInputTokens({ ...candidate, messages: context.project(candidate.messages) })) })
         entry.checkpoint = new ExecutionCheckpointPlugin(saved.checkpoint, { canResumeModel: () => this.hasModelContinuation(entry) })
         entry.interrupt = new InterruptPlugin({ mode: 'terminate' })
-        entry.tasks = new BackgroundTasksPlugin({ newId: randomUUID, signal: () => this.signal(entry), onTask: task => {
+        entry.tasks = new BackgroundTasksPlugin({ newId: randomUUID, signal: () => this.signal(entry), context: () => entry.context, onTask: task => {
             if (!entry.taskRuns.has(task.id)) entry.taskRuns.set(task.id, entry.runId)
             entry.taskFacts.set(task.id, task); void this.publish(entry, 'background-task', task, { runId: entry.taskRuns.get(task.id) }).catch(() => {})
         } })
@@ -783,12 +783,12 @@ export class QuiFoxRuntime {
         const allowed = (name: string): boolean => (!entry.metadata.parentId || name !== 'subagent_start') && (!entry.metadata.workflowActor || !name.startsWith('workflow_')) && (entry.config.memory.enabled || !name.startsWith('memory_')) && toolAllowed(name, entry.metadata.toolScopes, entry.metadata.toolDenylist) &&
             toolAllowed(name, definition?.tools ? [definition.tools] : [], definition?.disallowedTools) && (definition?.permissionMode !== 'plan' || planTools.has(name))
         const approvalMode = (): 'ask' | 'allow' | 'deny' => entry.metadata.approvalMode === 'deny' || definition?.permissionMode === 'dontAsk' || definition?.permissionMode === 'plan' ? 'deny' : entry.metadata.approvalMode ?? entry.config.approval
-        entry.permissions = new PermissionGate({ sessionId: saved.metadata.id, mode: approvalMode, allowed, signal: () => this.signal(entry),
+        entry.permissions = new PermissionGate({ sessionId: saved.metadata.id, mode: approvalMode, allowed, signal: () => this.signal(entry), preparedTools: ['run_command'],
             inspect: (call, ctx) => inspectTool(entry.metadata.workspace, call, ctx.tools.policy(call.name)?.sideEffect === 'none' || call.name === 'open_view'),
             operationId: call => this.operationId(entry, call.id), onRequest: request => { void this.publish(entry, 'approval', request).catch(() => {}) } })
         const bound = { workflows: pluginEnabled(config, 'workflows') && !entry.metadata.workflowActor, langchain: pluginEnabled(config, 'langchain') && !entry.metadata.workflowActor }
         const hasBound = bound.workflows || bound.langchain
-        entry.skills = new SkillsPlugin({ files: hasBound ? workflowSkillFiles(project.files, this.workflowDocuments(config).plugins, bound) : project.files, roots: [...project.roots, ...hasBound ? [workflowSkillRoot] : []], context: () => entry.context, disabled: config.skills.disabled,
+        entry.skills = new SkillsPlugin({ files: hasBound ? await workflowSkillFiles(project.files, this.workflowDocuments(config).plugins, bound, this.paths.root) : project.files, roots: [...project.roots, ...hasBound ? [workflowSkillRoot] : []], context: () => entry.context, disabled: config.skills.disabled,
             selected: input => { const prompt = (input as { prompt?: string } | undefined)?.prompt; const match = prompt && /^(?:\$([^\s]+)|\/([a-z0-9-]+))(?:\s|$)/.exec(prompt); return match ? [match[1] ?? match[2]!] : [] } })
         entry.guidance = new ProjectGuidancePlugin({ files: project.files, scopes: project.scopes, context: () => entry.context })
         const memory = new MemoryPlugin({ service: this.memory, binding: () => ({ ownerId: entry.metadata.ownerId, conversationId: entry.metadata.id,
@@ -871,7 +871,7 @@ export class QuiFoxRuntime {
             } })
         const agentConfiguration: AgentPlugin<ChatInput> = { id: 'host-agent-configuration', hooks: {
             onInitialize: async ctx => {
-                for (const tool of ctx.tools.values()) if (tool.policy.sideEffect === 'none') planTools.add(tool.name)
+                for (const tool of ctx.tools.values()) if (tool.policy.sideEffect === 'none' || tool.name === 'run_command') planTools.add(tool.name)
                 if (definition?.permissionMode === 'plan') entry.metadata.toolScopes = [...entry.metadata.toolScopes ?? [], [...planTools]]
                 for (const tool of ctx.tools.values()) if (!allowed(tool.name)) ctx.tools.remove(tool.name)
             },
@@ -932,18 +932,27 @@ export class QuiFoxRuntime {
                 const value = await this.executeWorkflow(entry, entry.metadata.workflow!.script, { question, messages })
                 return typeof value === 'string' ? value : JSON.stringify(value)
             } }) as AgentPlugin<ChatInput> : undefined
-        const workflows = new WorkflowToolsPlugin({ inspect: async script => inspectWorkflow(script),
-            save: (name, script) => new WorkflowLibrary(this.paths.root).save(name, script),
+        const workflows = new WorkflowToolsPlugin({ context: () => entry.context, skillPath: join(this.paths.root, 'plugin-skills', 'typescript-workflows', 'SKILL.md'), libraryPath: new WorkflowLibrary(this.paths.root).directory,
             run: async (source, input) => {
+                let script: string
+                try {
+                    script = source.script ?? (source.path ? await readWorkflowFile(resolve(entry.metadata.workspace, source.path)) : (await new WorkflowLibrary(this.paths.root).read(source.name!)).script)
+                    const analysis = inspectWorkflow(script)
+                    if (!analysis.ok) throw new Error(analysis.diagnostics.map(item => `${item.line}:${item.column} ${item.message}`).join('\n'))
+                } catch (cause) { throw new WorkflowInputError(cause instanceof Error ? cause.message : 'Workflow source is invalid.') }
                 const call = entry.checkpoint.snapshot()?.calls.find(call => call.status === 'started')
                 if (!call) throw new Error('工作流调用缺少执行身份。')
-                return this.executeWorkflow(entry, source.script ?? (await new WorkflowLibrary(this.paths.root).read(source.name!)).script, input, this.operationId(entry, call.id))
+                return this.executeWorkflow(entry, script, input, this.operationId(entry, call.id))
             } })
         const knowledge = new KnowledgePlugin(input => mockRetrieveKnowledge(input, this.signal(entry)), mockRetrievalDocumentation.description) as AgentPlugin<ChatInput>
         const candidates = [preparation, entry.interrupt as AgentPlugin<ChatInput>, privateResults, entry.permissions, entry.checkpoint,
             ...!entry.metadata.workflowActor ? [{ id: 'langchain' } as AgentPlugin<ChatInput>] : [],
             entry.conversation, entry.inbox, entry.skills, entry.guidance, memory, new CompactionPlugin(), entry.tasks as AgentPlugin<ChatInput>,
-            nativeTools({ workspace: entry.metadata.workspace, signal: () => this.signal(entry), tasks: entry.tasks, backgroundEnabled: pluginEnabled(config, 'background-tasks') }) as AgentPlugin<ChatInput>, entry.subagents, ...this.mcpPlugins(entry, { ...config, mcp: config.mcp.filter(server => !entry.metadata.workflowActor || entry.metadata.workflowPlugins?.includes('mcp:' + server.id)) }, clients),
+            nativeTools({ workspace: entry.metadata.workspace, signal: () => this.signal(entry), tasks: entry.tasks, context: () => entry.context, backgroundEnabled: pluginEnabled(config, 'background-tasks'),
+                authorize: (ctx, input) => {
+                    const call = entry.checkpoint.snapshot()?.calls.find(call => call.status === 'started')
+                    return call ? entry.permissions.authorizePrepared(ctx, { id: call.id, name: 'run_command', input }) : Promise.resolve(toolError('Command has no active operation identity.', { code: 'COMMAND_IDENTITY_MISSING' }))
+                } }) as AgentPlugin<ChatInput>, entry.subagents, ...this.mcpPlugins(entry, { ...config, mcp: config.mcp.filter(server => !entry.metadata.workflowActor || entry.metadata.workflowPlugins?.includes('mcp:' + server.id)) }, clients),
             ...presentation ? [presentation] : [], ...entry.metadata.workflowActor ? [] : [workflows as AgentPlugin<ChatInput>], ...!entry.metadata.workflowActor || entry.metadata.workflowPlugins?.includes('knowledge') ? [knowledge] : [], agentConfiguration, toolInterruption(() => this.signal(entry)), durability, entry.permissions.guard, ...workflow ? [workflow] : [], new EventPublisherPlugin<ChatInput>({ sourceId: entry.metadata.id }), entry.observability]
         entry.plugins = new PluginActivationPlugin<ChatInput>().select(candidates.map(plugin => Object.assign(plugin, { enabled: pluginEnabled(config, plugin.id) })))
         entry.agent = createAgent<ChatInput>({ plugins: entry.plugins })
@@ -957,7 +966,7 @@ export class QuiFoxRuntime {
     }
 
     private workflowDocuments(config: RuntimeConfig) {
-        return { api: 'TypeScript globals: args, agent(name?, {system?, model?, plugins?}).ask<T>(instructions), phase(label), log(message), Promise.all. Every new actor starts empty. Reuse its variable for shared context in this turn. args.question is the current user input; args.messages is outer user/assistant history. Label every named function or method with JSDoc @node Label or @phase Label. The graph shows resolved calls and actual runtime invocations. Return Markdown. No imports, fetch, Node or filesystem in scripts; use Agent tools. Validate with workflow_inspect, save with workflow_save, run with workflow_run. Render a script with a dynamic-workflow fenced block.',
+        return { api: 'TypeScript globals: args, agent(name?, {system?, model?, plugins?}).ask<T>(instructions), phase(label), log(message), Promise.all. Every new actor starts empty. Reuse its variable for shared context in this turn. args.question is the current user input; args.messages is outer user/assistant history. Label every named function or method with JSDoc @node Label or @phase Label. The graph shows resolved calls and actual runtime invocations. Return Markdown. No imports, fetch, Node or filesystem in scripts; use Agent tools. Save .ts files with ordinary file operations and execute with workflow_run, which validates before running. Render a script with a dynamic-workflow fenced block.',
             plugins: [...pluginEnabled(config, 'knowledge') ? [mockRetrievalDocumentation] : [],
                 ...config.mcp.filter(server => server.enabled).map(server => ({ id: 'mcp:' + server.id, description: 'MCP tools registered by the Host; use the actual tool schemas available to the Agent.' }))] }
     }
@@ -995,7 +1004,7 @@ export class QuiFoxRuntime {
                             workspace: entry.metadata.workspace, parentId: entry.metadata.id, workflowActor: true, workflowPlugins: persona.plugins ?? [], modelId: persona.model ?? entry.metadata.modelId ?? 'default',
                             createdAt: now, updatedAt: now, revision: 0, generateMemory: false, initialInstructions: persona.system ?? '',
                             approvalMode: entry.permissions.mode, toolScopes: [...entry.metadata.toolScopes ?? [], entry.owner?.tools.values().map(tool => tool.name) ?? [], ...persona.tools ? [persona.tools] : []],
-                            toolDenylist: [...entry.metadata.toolDenylist ?? [], 'subagent_start', 'workflow_run', 'workflow_save'] }
+                            toolDenylist: [...entry.metadata.toolDenylist ?? [], 'subagent_start', 'workflow_run'] }
                         actor = this.entries.get(id) ?? await this.compose({ metadata, session: { version: 1, id, ownerId: metadata.ownerId, history: [] }, inbox: { version: 1, messages: [] }, origins: {}, inputOrigins: {}, admissions: {}, status: 'idle' })
                         signal.throwIfAborted()
                         this.entries.set(id, actor)
@@ -1085,7 +1094,7 @@ export class QuiFoxRuntime {
             ...(effort.data ? { reasoningEffort: effort.data } : {}), ...(agent ? { agentName: agent.name } : {}),
             ...(prepared ? { creationIdentity: prepared.creationIdentity, ...(prepared.instructions ? { initialInstructions: prepared.instructions } : {}) } : {}),
             toolScopes: [...entry.metadata.toolScopes ?? [], owner.tools.values().map(tool => tool.name), ...(agent?.tools ? [agent.tools] : []),
-                ...(agent?.permissionMode === 'plan' ? [owner.tools.values().filter(tool => tool.policy.sideEffect === 'none').map(tool => tool.name)] : [])],
+                ...(agent?.permissionMode === 'plan' ? [owner.tools.values().filter(tool => tool.policy.sideEffect === 'none' || tool.name === 'run_command').map(tool => tool.name)] : [])],
             toolDenylist: [...entry.metadata.toolDenylist ?? [], ...agent?.disallowedTools ?? []], ...(deny ? { approvalMode: 'deny' as const } : entry.metadata.approvalMode ? { approvalMode: entry.metadata.approvalMode } : {}) },
             session: session.snapshot(), inbox: { version: 1, messages: [] }, origins: Object.fromEntries(session.snapshot().history.map(item => [item.id, prepared?.origins[item.id] ?? entry.origins[item.id] ?? 'context'])),
             inputOrigins: {}, admissions: {}, status: 'idle' }, [], { parent: entry, owner, control })

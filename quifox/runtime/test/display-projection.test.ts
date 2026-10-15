@@ -16,7 +16,7 @@ it('keeps long external tool identities distinct and consistently associated in 
 
 it('binds a long call ID to the real composite operation through approval, receipt and repeated projection', async () => {
     const callId = 'shared-prefix'.repeat(100) + 'actual-call'
-    const fixture = await synthetic((_input, index) => index === 1 ? { calls: [{ id: callId, name: 'write_file', input: { path: 'long-id.txt', content: 'actual content' } }] } : { text: 'done' })
+    const fixture = await synthetic((_input, index) => index === 1 ? { calls: [{ id: callId, name: 'apply_patch', input: { path: 'long-id.txt', oldText: '', newText: 'actual content' } }] } : { text: 'done' })
     try {
         const session = await fixture.runtime.command({ type: 'create' }) as SessionView
         await fixture.runtime.command({ type: 'submit', sessionId: session.id, prompt: 'write with a long external call identity' })
@@ -87,7 +87,7 @@ it('bounds pending messages, Memory and catalogs while retaining the current app
 
 it('publishes a bounded native receipt while retaining its full file difference in the journal', async () => {
     const content = 'x'.repeat(200_000)
-    const fixture = await synthetic((_input, index) => index === 1 ? { calls: [{ id: 'write', name: 'write_file', input: { path: 'large.txt', content } }] } : { text: 'done' }, config => { config.approval = 'allow' })
+    const fixture = await synthetic((_input, index) => index === 1 ? { calls: [{ id: 'write', name: 'apply_patch', input: { path: 'large.txt', oldText: '', newText: content } }] } : { text: 'done' }, config => { config.approval = 'allow' })
     const events: RuntimeEvent[] = []; fixture.runtime.subscribe(event => events.push(event))
     try {
         const session = await fixture.runtime.command({ type: 'create' }) as SessionView
